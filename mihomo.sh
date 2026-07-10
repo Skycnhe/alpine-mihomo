@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # =====================================================================
-#  Mihomo (Clash Meta) Alpine Linux & LXC 整合管理脚本
+#  Mihomo (Clash Meta) Alpine Linux & LXC 整合管理脚本 (含自动换源版)
 # =====================================================================
 
 # 字体颜色定义
@@ -30,6 +30,35 @@ BINARY_PATH="/usr/local/bin/mihomo"
 SERVICE_PATH="/etc/init.d/mihomo"
 GH_PROXY=""
 
+# 新增功能：自动/手动更换 Alpine 软件源 (APK 源)
+change_alpine_mirror() {
+    echo -e "${YELLOW}检测到您正在准备安装依赖，是否需要将 Alpine APK 软件源替换为国内加速镜像源？${NC}"
+    echo "1. 替换为 清华大学 (Tsinghua) 镜像源 [推荐]"
+    echo "2. 替换为 阿里云 (Aliyun) 镜像源"
+    echo "3. 替换为 腾讯云 (Tencent) 镜像源"
+    echo "4. 保持系统当前默认源 (不修改)"
+    echo -n "请选择 [1-4]: "
+    read -r MIRROR_OPT
+    case "$MIRROR_OPT" in
+        1)
+            # 安全替换，保留系统原本的版本号（如 v3.18 / v3.20 / edge）
+            sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/repositories
+            echo -e "${GREEN}✔ 已成功将系统 APK 源替换为【清华大学】镜像源。${NC}"
+            ;;
+        2)
+            sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+            echo -e "${GREEN}✔ 已成功将系统 APK 源替换为【阿里云】镜像源。${NC}"
+            ;;
+        3)
+            sed -i 's/dl-cdn.alpinelinux.org/mirrors.cloud.tencent.com/g' /etc/apk/repositories
+            echo -e "${GREEN}✔ 已成功将系统 APK 源替换为【腾讯云】镜像源。${NC}"
+            ;;
+        *)
+            echo -e "${BLUE}保持系统默认源不变。${NC}"
+            ;;
+    esac
+}
+
 # 设置/清除 GitHub 代理
 set_proxy() {
     echo -e "${YELLOW}选择下载源加速（主要针对国内环境）：${NC}"
@@ -44,13 +73,14 @@ set_proxy() {
     fi
 }
 
-# 安装必要依赖
+# 自动下载缺少的系统软件与依赖
 install_dependencies() {
     echo -e "${BLUE}正在同步 APK 软件包并安装依赖 (curl, gzip, unzip, ca-certificates)...${NC}"
+    # 更新源索引并安装必要依赖，防止因精简系统缺少组件报错
     apk update >/dev/null 2>&1
     apk add --no-cache curl gzip unzip ca-certificates tzdata >/dev/null 2>&1
     if [ $? -ne 0 ]; then
-        echo -e "${RED}依赖安装失败，请检查您的 apk 源或网络。${NC}"
+        echo -e "${RED}依赖安装失败，请检查您的网络连接或尝试在菜单中先执行换源操作。${NC}"
         exit 1
     fi
     echo -e "${GREEN}依赖组件准备完毕。${NC}"
@@ -86,7 +116,7 @@ get_latest_version() {
     echo -e "${BLUE}正在从 GitHub 获取最新内核版本...${NC}"
     LATEST_TAG=$(curl -s --connect-timeout 5 https://api.github.com/repos/MetaCubeX/mihomo/releases/latest | grep -oE '"tag_name": "[^"]+"' | head -n1 | cut -d'"' -f4)
     if [ -z "$LATEST_TAG" ]; then
-        LATEST_TAG="v1.19.28" # 2026年稳定版默认 fallback 版本
+        LATEST_TAG="v1.19.28" # 默认 fallback 稳定版
         echo -e "${YELLOW}动态获取失败，将使用内置兜底版本: ${LATEST_TAG}${NC}"
     else
         echo -e "${GREEN}获取到最新版本: ${LATEST_TAG}${NC}"
@@ -183,8 +213,9 @@ EOF
 
 # 1. 主安装流程
 install_mihomo() {
+    change_alpine_mirror  # 执行依赖下载前，提供换源引导
     set_proxy
-    install_dependencies
+    install_dependencies  # 执行依赖检测与自动安装
     detect_arch
     get_latest_version
     download_binary
@@ -354,7 +385,7 @@ enable_tun_mode() {
         echo -e "  lxc.cgroup2.devices.allow: c 10:200 rwm"
         echo -e "  lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file"
         echo -e "  --------------------------------------------------"
-        echo -e "按下 [回车键] 强制继续系统配置（建议稍后按上面步骤配置宿主机）...${NC}"
+        echo -e "按 [回车键] 强制继续系统配置（建议稍后按上面步骤配置宿主机）...${NC}"
         read -r
     else
         echo -e "${GREEN}✔ 已确认系统存在 /dev/net/tun 设备。${NC}"
@@ -479,6 +510,14 @@ uninstall_mihomo() {
     esac
 }
 
+# 手动执行换源服务入口 (方便用户在日常维护中自主切换)
+manual_change_mirror() {
+    change_alpine_mirror
+    echo -e "${BLUE}正在使用新源进行索引测试...${NC}"
+    apk update
+    echo -e "${GREEN}源配置更新完毕。${NC}"
+}
+
 # 获取实时进程状态
 get_status() {
     if pgrep -x "mihomo" >/dev/null; then
@@ -504,23 +543,24 @@ show_menu() {
     echo -e "  服务状态: ${STATUS_TEXT}    |  已装版本: ${BLUE}${VERSION_TEXT}${NC}"
     echo -e "  主配置文件: ${CONFIG_FILE}"
     echo -e "${GREEN}====================================================${NC}"
-    echo -e "  1.  安装部署 Mihomo"
+    echo -e "  1.  安装部署 Mihomo (包含系统自动换源与缺失依赖下载)"
     echo -e "  2.  在线检测并升级内核"
     echo -e "  3.  导入在线配置文件 / 订阅链接"
     echo -e "  4.  一键校验当前配置文件语法"
     echo -e "  5.  安装/升级 Web 仪表盘 (MetaCubeXD)"
     echo -e "  6.  同步/更新 Geo 数据规则库 (GeoIP/GeoSite)"
     echo -e "  7.  一键配置并开启系统级 TUN 模式支持 (核心功能)"
+    echo -e "  8.  手动更换/恢复 Alpine 系统 APK 软件源"
     echo -e "----------------- 状态管理服务 --------------------"
-    echo -e "  8.  启动服务 (Start)"
-    echo -e "  9.  停止服务 (Stop)"
-    echo -e "  10. 重启服务 (Restart)"
-    echo -e "  11. 查看实时追踪日志 (Live Log)"
-    echo -e "  12. 清理重置本地日志"
-    echo -e "  13. 一键完全卸载程序"
-    echo -e "  14. 退出脚本"
+    echo -e "  9.  启动服务 (Start)"
+    echo -e "  10. 停止服务 (Stop)"
+    echo -e "  11. 重启服务 (Restart)"
+    echo -e "  12. 查看实时追踪日志 (Live Log)"
+    echo -e "  13. 清理重置本地日志"
+    echo -e "  14. 一键完全卸载程序"
+    echo -e "  15. 退出脚本"
     echo -e "${GREEN}====================================================${NC}"
-    echo -n "请键入对应项 [1-14]: "
+    echo -n "请键入对应项 [1-15]: "
 }
 
 # 循环事件处理
@@ -535,14 +575,15 @@ while true; do
         5) install_dashboard ;;
         6) download_geodata ;;
         7) enable_tun_mode ;;
-        8) rc-service mihomo start ;;
-        9) rc-service mihomo stop ;;
-        10) rc-service mihomo restart ;;
-        11) view_live_logs ;;
-        12) truncate_logs ;;
-        13) uninstall_mihomo ;;
-        14) echo -e "${GREEN}已安全退出。${NC}"; exit 0 ;;
-        *) echo -e "${RED}输入无效，请输入 1 至 14 范围内的编号。${NC}" ;;
+        8) manual_change_mirror ;;
+        9) rc-service mihomo start ;;
+        10) rc-service mihomo stop ;;
+        11) rc-service mihomo restart ;;
+        12) view_live_logs ;;
+        13) truncate_logs ;;
+        14) uninstall_mihomo ;;
+        15) echo -e "${GREEN}已安全退出。${NC}"; exit 0 ;;
+        *) echo -e "${RED}输入无效，请输入 1 至 15 范围内的编号。${NC}" ;;
     esac
     echo -e "\n请按 [回车键] 再次返回主控面板..."
     read -r
