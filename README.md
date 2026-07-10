@@ -34,13 +34,15 @@ Meta）一键部署、运行与维护方案。脚本基于 OpenRC 初始化系�
 
 快速开始
 
-SCRIPT_URL="https://raw.githubusercontent.com/Skycnhe/alpine-mihomo/refs/heads/Hk001/mihomo.sh" sh -c 'wget -qO mihomo_manager.sh "$SCRIPT_URL" && sed -i "s|CUSTOM_TEMPLATE_URL=.*|CUSTOM_TEMPLATE_URL=\"$CONFIG_URL\"|" mihomo_manager.sh && chmod +x mihomo_manager.sh && ./mihomo_manager.sh'
+如果您希望在下载脚本的同时直接绑定您存放在 GitHub 上的个性化配置文件，可以复制下方命令。您只需将最前方的 CONFIG_URL 替换为您自己的
+Clash 配置文件直链，即可直接粘贴到 Alpine 终端回车运行 [1]：
 
-命令解析：此命令利用 Alpine 内置的 wget 下载管理脚本，随后通过 sed 自动将您指定的配置直链替换写入脚本中，最后赋予执行权限并直接运行。
+CONFIG_URL="<YOUR_CONFIG_RAW_URL>" sh -c 'wget -qO mihomo_manager.sh https://raw.githubusercontent.com/Skycnhe/alpine-mihomo/main/mihomo_manager.sh && sed -i "s|CUSTOM_TEMPLATE_URL=.*|CUSTOM_TEMPLATE_URL=\"$CONFIG_URL\"|" mihomo_manager.sh && chmod +x mihomo_manager.sh && ./mihomo_manager.sh'
 
-服务管理命令（命令行快捷控制）
 
-部署完成后，除了可以通过运行管理脚本控制服务外，您还可以在 Alpine 终端直接使用系统级 OpenRC 命令 进行快速控制，无需打开脚本菜单：
+命令行服务管理（启动、停止、重启）
+
+部署完成后，您无需每次都打开管理脚本，可以直接在 Alpine 终端运行系统内置的服务指令进行快捷控制：
 
   - 启动服务：
     rc-service mihomo start
@@ -48,12 +50,19 @@ SCRIPT_URL="https://raw.githubusercontent.com/Skycnhe/alpine-mihomo/refs/heads/H
     rc-service mihomo stop
   - 重启服务：
     rc-service mihomo restart
-  - 查看服务运行状态：
+  - 查看运行状态：
     rc-service mihomo status
-  - 启用开机自启：
+  - 设为开机自启：
     rc-update add mihomo default
-  - 禁用开机自启：
+  - 取消开机自启：
     rc-update del mihomo default
+
+此外，您也可以直接通过调用 OpenRC 初始化脚本来实现相同控制：
+
+/etc/init.d/mihomo start     # 启动
+/etc/init.d/mihomo stop      # 停止
+/etc/init.d/mihomo restart   # 重启
+/etc/init.d/mihomo status    # 状态
 
 PVE LXC 容器环境准备（非常重要）
 
