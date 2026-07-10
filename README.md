@@ -26,7 +26,7 @@
 apk add --no-cache curl
 
 # 2. 下载并启动一键管理脚本
-curl -sSL -o mihomo.sh https://raw.githubusercontent.com/Skycnhe/alpine-mihomo/main/mihomo.sh && chmod +x mihomo.sh && ./mihomo.sh
+curl -sSL -o mihomo.sh https://raw.githubusercontent.com/Skycnhe/alpine-mihomo/refs/heads/Hk001/mihomo.sh && chmod +x mihomo.sh && ./mihomo.sh
 
 📁 文件结构与默认路径
 内核程序路径：/usr/local/bin/mihomo
