@@ -1,0 +1,888 @@
+# =========================================================
+#  Mihomo (Clash Meta) 旁路由/网关高性能原生配置文件
+# =========================================================
+
+# --- 基础基础设置 ---
+mixed-port: 7890
+allow-lan: true
+mode: rule
+log-level: info
+ipv6: true
+
+# --- 外部控制与面板（已接入 MetaCubeXD） ---
+external-controller: '0.0.0.0:9090'
+secret: '123456'
+external-ui: 'ui'
+
+# --- 旁路由/透明网关的核心 TUN 与 DNS 服务 ---
+tun:
+  enable: true
+  stack: mixed
+  auto-route: true
+  auto-redirect: true
+  auto-detect-interface: true
+  dns-hijack:
+    - "any:53"
+
+dns:
+  enable: true
+  listen: 0.0.0.0:53
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+
+# =========================================================
+#  1. 订阅节点提供商 (Proxy Provider)
+# =========================================================
+# 💡 请在下方 url 处替换为您真实的节点订阅链接
+proxy-providers:
+  subscription:
+    type: http
+    url: "https://your-real-subscription-link-here" 
+    path: ./proxy_providers/subscription.yaml
+    interval: 3600
+    health-check:
+      enable: true
+      url: https://cp.cloudflare.com/generate_204
+      interval: 300
+
+# =========================================================
+#  2. 策略组配置 (Proxy Groups)
+# =========================================================
+proxy-groups:
+  # --- 1. 核心策略组 ---
+  - name: 🚀 节点选择
+    type: select
+    proxies:
+      - ♻️ 全局自动
+      - ⚖️ 🇭🇰 香港负载
+      - ⚖️ 🇯🇵 日本负载
+      - ⚖️ 🇸🇬 狮城负载
+      - ⚖️ 🇰🇷 韩国负载
+      - ⚖️ 🇹🇼 台湾负载
+      - ⚖️ 🇺🇸 美国负载
+      - 🖐️ 手动选择
+      - 🏠 直连
+
+  - name: ♻️ 全局自动
+    type: url-test
+    url: https://cp.cloudflare.com/generate_204
+    interval: 300
+    tolerance: 150
+    use:
+      - subscription
+
+  # --- 2. 地区负载均衡组 (通过正则动态从订阅中提取节点) ---
+  - name: ⚖️ 🇭🇰 香港负载
+    type: load-balance
+    strategy: round-robin
+    url: https://cp.cloudflare.com/generate_204
+    interval: 600
+    use:
+      - subscription
+    filter: '(?i)港|HK|HongKong|HGC|WTT|CMI|Hkg'
+
+  - name: ⚖️ 🇯🇵 日本负载
+    type: load-balance
+    strategy: round-robin
+    url: https://cp.cloudflare.com/generate_204
+    interval: 600
+    use:
+      - subscription
+    filter: '(?i)日|JP|Japan|Tokyo|Osaka|Kyoto|Tyo'
+
+  - name: ⚖️ 🇸🇬 狮城负载
+    type: load-balance
+    strategy: round-robin
+    url: https://cp.cloudflare.com/generate_204
+    interval: 600
+    use:
+      - subscription
+    filter: '(?i)新|SG|Singapore|Lion|Sgp'
+
+  - name: ⚖️ 🇰🇷 韩国负载
+    type: load-balance
+    strategy: round-robin
+    url: https://cp.cloudflare.com/generate_204
+    interval: 600
+    use:
+      - subscription
+    filter: '(?i)韩|KR|Korea|KOR|Seoul|Sel'
+
+  - name: ⚖️ 🇹🇼 台湾负载
+    type: load-balance
+    strategy: round-robin
+    url: https://cp.cloudflare.com/generate_204
+    interval: 600
+    use:
+      - subscription
+    filter: '(?i)台|TW|Taiwan|Taipei|Hinet|Tpe|NewTaipei'
+
+  - name: ⚖️ 🇺🇸 美国负载
+    type: load-balance
+    strategy: round-robin
+    url: https://cp.cloudflare.com/generate_204
+    interval: 600
+    use:
+      - subscription
+    filter: '(?i)美|US|States|America|Portland|San|Los|Seattle|Chicago|Sjc'
+
+  # --- 3. 辅助分组 ---
+  - name: 🖐️ 手动选择
+    type: select
+    use:
+      - subscription
+
+  # --- 4. 专项服务组 ---
+  - name: 🤖 AI服务
+    type: select
+    proxies:
+      - ⚖️ 🇺🇸 美国负载
+      - ⚖️ 🇸🇬 狮城负载
+      - ⚖️ 🇯🇵 日本负载
+      - 🚀 节点选择
+
+  - name: 🎵 TikTok
+    type: select
+    proxies:
+      - ⚖️ 🇺🇸 美国负载
+      - ⚖️ 🇯🇵 日本负载
+      - ⚖️ 🇸🇬 狮城负载
+      - ⚖️ 🇰🇷 韩国负载
+      - ⚖️ 🇹🇼 台湾负载
+      - ⚖️ 🇭🇰 香港负载
+      - 🚀 节点选择
+
+  - name: 📺 国际媒体
+    type: select
+    proxies:
+      - ⚖️ 🇭🇰 香港负载
+      - ⚖️ 🇯🇵 日本负载
+      - ⚖️ 🇸🇬 狮城负载
+      - ⚖️ 🇹🇼 台湾负载
+      - ⚖️ 🇰🇷 韩国负载
+      - ⚖️ 🇺🇸 美国负载
+      - 🚀 节点选择
+
+  - name: 📺 国内媒体
+    type: select
+    proxies:
+      - 🏠 直连
+      - ⚖️ 🇭🇰 香港负载
+      - 🚀 节点选择
+
+  - name: 📲 Telegram
+    type: select
+    proxies:
+      - ⚖️ 🇸🇬 狮城负载
+      - ⚖️ 🇭🇰 香港负载
+      - ⚖️ 🇯🇵 日本负载
+      - ⚖️ 🇰🇷 韩国负载
+      - ⚖️ 🇹🇼 台湾负载
+      - ⚖️ 🇺🇸 美国负载
+      - 🚀 节点选择
+
+  - name: 🔍 Google服务
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - ⚖️ 🇭🇰 香港负载
+      - ⚖️ 🇯🇵 日本负载
+      - ⚖️ 🇸🇬 狮城负载
+      - ⚖️ 🇰🇷 韩国负载
+      - ⚖️ 🇹🇼 台湾负载
+      - ⚖️ 🇺🇸 美国负载
+      - 🏠 直连
+
+  - name: 🍎 苹果服务
+    type: select
+    proxies:
+      - 🏠 直连
+      - 🚀 节点选择
+
+  - name: 💻 微软服务
+    type: select
+    proxies:
+      - 🏠 直连
+      - 🚀 节点选择
+
+  - name: 🎮 游戏服务
+    type: select
+    proxies:
+      - 🏠 直连
+      - 🚀 节点选择
+
+  # --- 5. 基础状态组 ---
+  - name: 🏠 直连
+    type: select
+    proxies:
+      - DIRECT
+
+  - name: 🚫 拦截
+    type: select
+    proxies:
+      - REJECT
+      - DIRECT
+
+  - name: 🐟 漏网之鱼
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - 🏠 直连
+
+# =========================================================
+#  3. 云端规则集提供商 (Rule Providers)
+# =========================================================
+rule-providers:
+  lan:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/LocalAreaNetwork.list"
+    path: ./ruleset/lan.yaml
+    interval: 86400
+  unbreak:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Unbreak.list"
+    path: ./ruleset/unbreak.yaml
+    interval: 86400
+  ban_ad:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/BanAD.list"
+    path: ./ruleset/ban_ad.yaml
+    interval: 86400
+  ban_program_ad:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/BanProgramAD.list"
+    path: ./ruleset/ban_program_ad.yaml
+    interval: 86400
+  ban_easylist:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/BanEasyList.list"
+    path: ./ruleset/ban_easylist.yaml
+    interval: 86400
+  ban_easylist_china:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/BanEasyListChina.list"
+    path: ./ruleset/ban_easylist_china.yaml
+    interval: 86400
+  anti_ad:
+    type: http
+    behavior: domain
+    url: "https://fastly.jsdelivr.net/gh/privacy-protection-tools/anti-AD@master/anti-ad-clash.yaml"
+    path: ./ruleset/anti_ad.yaml
+    interval: 86400
+  openai:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Ruleset/OpenAi.list"
+    path: ./ruleset/openai.yaml
+    interval: 86400
+  claude:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Ruleset/Claude.list"
+    path: ./ruleset/claude.yaml
+    interval: 86400
+  tiktok:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Ruleset/TikTok.list"
+    path: ./ruleset/tiktok.yaml
+    interval: 86400
+  youtube:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Ruleset/YouTube.list"
+    path: ./ruleset/youtube.yaml
+    interval: 86400
+  netflix:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Ruleset/Netflix.list"
+    path: ./ruleset/netflix.yaml
+    interval: 86400
+  disney:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Ruleset/DisneyPlus.list"
+    path: ./ruleset/disney.yaml
+    interval: 86400
+  spotify:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Ruleset/Spotify.list"
+    path: ./ruleset/spotify.yaml
+    interval: 86400
+  china_media:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/ChinaMedia.list"
+    path: ./ruleset/china_media.yaml
+    interval: 86400
+  bilibili:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Ruleset/Bilibili.list"
+    path: ./ruleset/bilibili.yaml
+    interval: 86400
+  netease_music:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Ruleset/NetEaseMusic.list"
+    path: ./ruleset/netease_music.yaml
+    interval: 86400
+  google:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Ruleset/Google.list"
+    path: ./ruleset/google.yaml
+    interval: 86400
+  google_loyalsoldier:
+    type: http
+    behavior: domain
+    url: "https://fastly.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/google.txt"
+    path: ./ruleset/google_loyalsoldier.yaml
+    interval: 86400
+  telegram:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Telegram.list"
+    path: ./ruleset/telegram.yaml
+    interval: 86400
+  telegram_loyalsoldier:
+    type: http
+    behavior: domain
+    url: "https://fastly.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/telegram.txt"
+    path: ./ruleset/telegram_loyalsoldier.yaml
+    interval: 86400
+  telegram_cidr:
+    type: http
+    behavior: ipcidr
+    url: "https://fastly.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/telegramcidr.txt"
+    path: ./ruleset/telegram_cidr.yaml
+    interval: 86400
+  twitter:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Ruleset/Twitter.list"
+    path: ./ruleset/twitter.yaml
+    interval: 86400
+  facebook:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Ruleset/Facebook.list"
+    path: ./ruleset/facebook.yaml
+    interval: 86400
+  github:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Ruleset/Github.list"
+    path: ./ruleset/github.yaml
+    interval: 86400
+  proxy_gfw:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/ProxyGFWlist.list"
+    path: ./ruleset/proxy_gfw.yaml
+    interval: 86400
+  epic:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Ruleset/Epic.list"
+    path: ./ruleset/epic.yaml
+    interval: 86400
+  nintendo:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Ruleset/Nintendo.list"
+    path: ./ruleset/nintendo.yaml
+    interval: 86400
+  sony:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Ruleset/Sony.list"
+    path: ./ruleset/sony.yaml
+    interval: 86400
+  xbox:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Ruleset/Xbox.list"
+    path: ./ruleset/xbox.yaml
+    interval: 86400
+  apple:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Apple.list"
+    path: ./ruleset/apple.yaml
+    interval: 86400
+  apple_loyalsoldier:
+    type: http
+    behavior: domain
+    url: "https://fastly.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/apple.txt"
+    path: ./ruleset/apple_loyalsoldier.yaml
+    interval: 86400
+  microsoft:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Microsoft.list"
+    path: ./ruleset/microsoft.yaml
+    interval: 86400
+  steam:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/Ruleset/Steam.list"
+    path: ./ruleset/steam.yaml
+    interval: 86400
+  private:
+    type: http
+    behavior: domain
+    url: "https://fastly.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/private.txt"
+    path: ./ruleset/private.yaml
+    interval: 86400
+  direct:
+    type: http
+    behavior: domain
+    url: "https://fastly.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/direct.txt"
+    path: ./ruleset/direct.yaml
+    interval: 86400
+  china_max:
+    type: http
+    behavior: classical
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/ChinaMax.list"
+    path: ./ruleset/china_max.yaml
+    interval: 86400
+  lancidr:
+    type: http
+    behavior: ipcidr
+    url: "https://fastly.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/lancidr.txt"
+    path: ./ruleset/lancidr.yaml
+    interval: 86400
+  cncidr:
+    type: http
+    behavior: ipcidr
+    url: "https://fastly.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/cncidr.txt"
+    path: ./ruleset/cncidr.yaml
+    interval: 86400
+  china_company_ip:
+    type: http
+    behavior: ipcidr
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/ChinaCompanyIp.list"
+    path: ./ruleset/china_company_ip.yaml
+    interval: 86400
+  china_ip:
+    type: http
+    behavior: ipcidr
+    url: "https://fastly.jsdelivr.net/gh/ACL4SSR/ACL4SSR@master/Clash/ChinaIp.list"
+    path: ./ruleset/china_ip.yaml
+    interval: 86400
+
+# =========================================================
+#  4. 规则匹配分流 (Rules)
+# =========================================================
+rules:
+  # [STEP 0: 国家政务、税务、银行风控安全放行层]
+  - DOMAIN-SUFFIX,gov.cn,🏠 直连
+  - DOMAIN-SUFFIX,mil.cn,🏠 直连
+  - DOMAIN-SUFFIX,chinatax.gov.cn,🏠 直连
+  - DOMAIN-SUFFIX,gfb.gov.cn,🏠 直连
+  - DOMAIN-SUFFIX,shrb.org.cn,🏠 直连
+  - DOMAIN-SUFFIX,12333.gov.cn,🏠 直连
+  - DOMAIN-SUFFIX,pbccrc.org.cn,🏠 直连
+  - DOMAIN-SUFFIX,icbc,🏠 直连
+  - DOMAIN-SUFFIX,ccb,🏠 直连
+  - DOMAIN-SUFFIX,abchina,🏠 直连
+  - DOMAIN-SUFFIX,boc,🏠 直连
+  - DOMAIN-SUFFIX,cmbchina,🏠 直连
+
+  # [STEP 0.5: BT/PT 流量与 Tracker 强制直连]
+  - DOMAIN-KEYWORD,tracker,🏠 直连
+  - DOMAIN-KEYWORD,torrent,🏠 直连
+  - DOMAIN-KEYWORD,peer_id,🏠 直连
+  - DOMAIN-KEYWORD,info_hash,🏠 直连
+  - DOMAIN-KEYWORD,announce,🏠 直连
+
+  # [STEP 1: 局域网与系统底层修复]
+  - DOMAIN-SUFFIX,localhost,🏠 直连
+  - DOMAIN-SUFFIX,local,🏠 直连
+  - DOMAIN-SUFFIX,lan,🏠 直连
+  - IP-CIDR,0.0.0.0/8,🏠 直连,no-resolve
+  - IP-CIDR,10.0.0.0/8,🏠 直连,no-resolve
+  - IP-CIDR,100.64.0.0/10,🏠 直连,no-resolve
+  - IP-CIDR,127.0.0.0/8,🏠 直连,no-resolve
+  - IP-CIDR,169.254.0.0/16,🏠 直连,no-resolve
+  - IP-CIDR,172.16.0.0/12,🏠 直连,no-resolve
+  - IP-CIDR,192.168.0.0/16,🏠 直连,no-resolve
+  - IP-CIDR,224.0.0.0/4,🏠 直连,no-resolve
+  - IP-CIDR6,fc00::/7,🏠 直连,no-resolve
+  - IP-CIDR6,fe80::/10,🏠 直连,no-resolve
+
+  - RULE-SET,lan,🏠 直连
+  - RULE-SET,unbreak,🏠 直连
+  - DOMAIN-SUFFIX,services.googleapis.cn,🚀 节点选择
+
+  # [STEP 2: 广告与隐私追踪拦截 - 深度强化版]
+  - RULE-SET,ban_ad,🚫 拦截
+  - RULE-SET,ban_program_ad,🚫 拦截
+  - RULE-SET,ban_easylist,🚫 拦截
+  - RULE-SET,ban_easylist_china,🚫 拦截
+  - RULE-SET,anti_ad,🚫 拦截
+
+  # [STEP 1.5: 本地精细直连（风控、银行、高频国内服务等静态域名）]
+  - DOMAIN-SUFFIX,tongdun.net,🏠 直连
+  - DOMAIN-SUFFIX,tongduncdn.com,🏠 直连
+  - DOMAIN-SUFFIX,ishumei.com,🏠 直连
+  - DOMAIN-SUFFIX,riskradar.net,🏠 直连
+  - DOMAIN-SUFFIX,geetest.com,🏠 直连
+  - DOMAIN-SUFFIX,dingxiangyun.com,🏠 直连
+  - DOMAIN-SUFFIX,dingxiangyun.cn,🏠 直连
+  - DOMAIN-SUFFIX,trustdevice.net,🏠 直连
+  - DOMAIN-SUFFIX,antpay.com,🏠 直连
+  - DOMAIN-SUFFIX,rong360.com,🏠 直连
+
+  - DOMAIN-SUFFIX,jiguang.cn,🏠 直连
+  - DOMAIN-SUFFIX,jpush.cn,🏠 直连
+  - DOMAIN-SUFFIX,jpush.io,🏠 直连
+  - DOMAIN-SUFFIX,umeng.com,🏠 直连
+  - DOMAIN-SUFFIX,umengcloud.com,🏠 直连
+  - DOMAIN-SUFFIX,rongcloud.cn,🏠 直连
+  - DOMAIN-SUFFIX,rongcloud.com,🏠 直连
+
+  - DOMAIN-SUFFIX,95516.com,🏠 直连
+  - DOMAIN-SUFFIX,unionpay.com,🏠 直连
+  - DOMAIN-SUFFIX,unionpaysecure.com,🏠 直连
+  - DOMAIN-SUFFIX,icbc.com.cn,🏠 直连
+  - DOMAIN-SUFFIX,ccb.com,🏠 直连
+  - DOMAIN-SUFFIX,ccblife.com,🏠 直连
+  - DOMAIN-SUFFIX,boc.cn,🏠 直连
+  - DOMAIN-SUFFIX,abchina.com,🏠 直连
+  - DOMAIN-SUFFIX,psbc.com,🏠 直连
+  - DOMAIN-SUFFIX,bankcomm.com,🏠 直连
+  - DOMAIN-SUFFIX,cmbchina.com,🏠 直连
+  - DOMAIN-SUFFIX,spdb.com.cn,🏠 直连
+  - DOMAIN-SUFFIX,cib.com.cn,🏠 直连
+  - DOMAIN-SUFFIX,cebbank.com,🏠 直连
+  - DOMAIN-SUFFIX,pingan.com,🏠 直连
+  - DOMAIN-SUFFIX,pingan.com.cn,🏠 直连
+  - DOMAIN-SUFFIX,cmbwinglungbank.com,🏠 直连
+  - DOMAIN-SUFFIX,cmbc.com.cn,🏠 直连
+  - DOMAIN-SUFFIX,cgbchina.com.cn,🏠 直连
+  - DOMAIN-SUFFIX,hxb.com.cn,🏠 直连
+  - DOMAIN-SUFFIX,bankofshanghai.com,🏠 直连
+  - DOMAIN-SUFFIX,shrcb.com,🏠 直连
+  - DOMAIN-SUFFIX,gzcb.com.cn,🏠 直连
+  - DOMAIN-SUFFIX,nbcb.com.cn,🏠 直连
+  - DOMAIN-SUFFIX,njcb.com.cn,🏠 直连
+  - DOMAIN-SUFFIX,cqrcb.com,🏠 直连
+  - DOMAIN-SUFFIX,brcb.com.cn,🏠 直连
+  - DOMAIN-SUFFIX,czbank.com,🏠 直连
+  - DOMAIN-SUFFIX,hkbchina.com,🏠 直连
+  - DOMAIN-SUFFIX,bocd.com.cn,🏠 直连
+  - DOMAIN-SUFFIX,bocsh.com,🏠 直连
+  - DOMAIN-SUFFIX,srcb.com.cn,🏠 直连
+  - DOMAIN-SUFFIX,gdb.com.cn,🏠 直连
+
+  - DOMAIN-SUFFIX,alipay.com,🏠 直连
+  - DOMAIN-SUFFIX,alipayobjects.com,🏠 直连
+  - DOMAIN-SUFFIX,alipayhk.com,🏠 直连
+  - DOMAIN-SUFFIX,antgroup.com,🏠 直连
+  - DOMAIN-SUFFIX,antfinancial.com,🏠 直连
+  - DOMAIN-SUFFIX,tenpay.com,🏠 直连
+  - DOMAIN-SUFFIX,wechat.com,🏠 直连
+  - DOMAIN-SUFFIX,weixin.com,🏠 直连
+  - DOMAIN-SUFFIX,wx.qq.com,🏠 直连
+  - DOMAIN-SUFFIX,weixinbridge.com,🏠 直连
+  - DOMAIN-SUFFIX,servicewechat.com,🏠 直连
+  - DOMAIN-SUFFIX,qpic.cn,🏠 直连
+  - DOMAIN-SUFFIX,qlogo.cn,🏠 直连
+  - DOMAIN-SUFFIX,url.cn,🏠 直连
+  - DOMAIN-SUFFIX,wechatpay.cn,🏠 直连
+  - DOMAIN-SUFFIX,wecom.work,🏠 直连
+  - DOMAIN-SUFFIX,qiye.weixin.qq.com,🏠 直连
+  - DOMAIN-SUFFIX,qq.com,🏠 直连
+  - DOMAIN-SUFFIX,imqq.com,🏠 直连
+  - DOMAIN-SUFFIX,gtimg.com,🏠 直连
+  - DOMAIN-SUFFIX,gtimg.cn,🏠 直连
+  - DOMAIN-SUFFIX,gtimg.net,🏠 直连
+  - DOMAIN-SUFFIX,idqqimg.com,🏠 直连
+  - DOMAIN-SUFFIX,qqmail.com,🏠 直连
+  - DOMAIN-SUFFIX,foxmail.com,🏠 直连
+  - DOMAIN-SUFFIX,weiyun.com,🏠 直连
+  - DOMAIN-SUFFIX,myapp.com,🏠 直连
+  - DOMAIN-SUFFIX,immomo.com,🏠 直连
+  - DOMAIN-SUFFIX,tantanapp.com,🏠 直连
+
+  - DOMAIN-SUFFIX,dingtalk.com,🏠 直连
+  - DOMAIN-SUFFIX,dingtalkapps.com,🏠 直连
+  - DOMAIN-SUFFIX,dingtalk.cn,🏠 直连
+  - DOMAIN-SUFFIX,feishu.cn,🏠 直连
+  - DOMAIN-SUFFIX,feishucdn.com,🏠 直连
+  - DOMAIN-SUFFIX,feishupkg.com,🏠 直连
+  - DOMAIN-SUFFIX,wps.cn,🏠 直连
+  - DOMAIN-SUFFIX,wpscdn.cn,🏠 直连
+  - DOMAIN-SUFFIX,sf-express.com,🏠 直连
+  - DOMAIN-SUFFIX,cainiao.com,🏠 直连
+  - DOMAIN-SUFFIX,quark.cn,🏠 直连
+  - DOMAIN-SUFFIX,baidu.com,🏠 直连
+  - DOMAIN-SUFFIX,bdimg.com,🏠 直连
+  - DOMAIN-SUFFIX,bdstatic.com,🏠 直连
+
+  - DOMAIN-SUFFIX,deepseek.com,🏠 直连
+  - DOMAIN-SUFFIX,kimi.ai,🏠 直连
+  - DOMAIN-SUFFIX,moonshot.cn,🏠 直连
+  - DOMAIN-SUFFIX,doubao.com,🏠 直连
+  - DOMAIN-SUFFIX,coze.cn,🏠 直连
+  - DOMAIN-SUFFIX,tongyi.ai,🏠 直连
+  - DOMAIN-SUFFIX,yiyan.baidu.com,🏠 直连
+  - DOMAIN-SUFFIX,ernie.baidu.com,🏠 直连
+  - DOMAIN-SUFFIX,chatglm.cn,🏠 直连
+  - DOMAIN-SUFFIX,zhipuai.cn,🏠 直连
+  - DOMAIN-SUFFIX,minimax.chat,🏠 直连
+  - DOMAIN-SUFFIX,abab.com,🏠 直连
+  - DOMAIN-SUFFIX,stepfun.com,🏠 直连
+  - DOMAIN-SUFFIX,stepchat.cn,🏠 直连
+  - DOMAIN-SUFFIX,hunyuan.tencent.com,🏠 直连
+
+  - DOMAIN-SUFFIX,douyin.com,🏠 直连
+  - DOMAIN-SUFFIX,douyinpic.com,🏠 直连
+  - DOMAIN-SUFFIX,iesdouyin.com,🏠 直连
+  - DOMAIN-SUFFIX,snssdk.com,🏠 直连
+  - DOMAIN-SUFFIX,amemv.com,🏠 直连
+  - DOMAIN-SUFFIX,byteimg.com,🏠 直连
+  - DOMAIN-SUFFIX,ibytedtos.com,🏠 直连
+  - DOMAIN-SUFFIX,volccdn.com,🏠 直连
+  - DOMAIN-SUFFIX,ixigua.com,🏠 直连
+  - DOMAIN-SUFFIX,xiguavideo.com,🏠 直连
+  - DOMAIN-SUFFIX,kuaishou.com,🏠 直连
+  - DOMAIN-SUFFIX,gifshow.com,🏠 直连
+  - DOMAIN-SUFFIX,ksapisrv.com,🏠 直连
+  - DOMAIN-SUFFIX,yximgs.com,🏠 直连
+  - DOMAIN-SUFFIX,meitu.com,🏠 直连
+  - DOMAIN-SUFFIX,meipai.com,🏠 直连
+  - DOMAIN-SUFFIX,weibo.com,🏠 直连
+  - DOMAIN-SUFFIX,xiaohongshu.com,🏠 直连
+  - DOMAIN-SUFFIX,xiaohongshu.net,🏠 直连
+  - DOMAIN-SUFFIX,xhscdn.com,🏠 直连
+
+  - DOMAIN-SUFFIX,taobao.com,🏠 直连
+  - DOMAIN-SUFFIX,tmall.com,🏠 直连
+  - DOMAIN-SUFFIX,jd.com,🏠 直连
+  - DOMAIN-SUFFIX,jd.hk,🏠 直连
+  - DOMAIN-SUFFIX,pinduoduo.com,🏠 直连
+  - DOMAIN-SUFFIX,suning.com,🏠 直连
+  - DOMAIN-SUFFIX,meituan.com,🏠 直连
+  - DOMAIN-SUFFIX,meituan.net,🏠 直连
+  - DOMAIN-SUFFIX,dianping.com,🏠 直连
+  - DOMAIN-SUFFIX,dpfile.com,🏠 直连
+
+  - DOMAIN-SUFFIX,midea.com,🏠 直连
+  - DOMAIN-SUFFIX,midea.com.cn,🏠 直连
+  - DOMAIN-SUFFIX,smartmidea.net,🏠 直连
+  - DOMAIN-SUFFIX,haier.net,🏠 直连
+  - DOMAIN-SUFFIX,haier.com,🏠 直连
+  - DOMAIN-SUFFIX,hisense.com,🏠 直连
+  - DOMAIN-SUFFIX,tcl.com,🏠 直连
+  - DOMAIN-SUFFIX,yeelight.com,🏠 直连
+  - DOMAIN-SUFFIX,aqara.com,🏠 直连
+  - DOMAIN-SUFFIX,tuya.com,🏠 直连
+  - DOMAIN-SUFFIX,tuyaus.com,🏠 直连
+
+  - DOMAIN-SUFFIX,12315.cn,🏠 直连
+  - DOMAIN-KEYWORD,12315,🏠 直连
+  - DOMAIN-KEYWORD,gjzwfw,🏠 直连
+  - DOMAIN-KEYWORD,12306,🏠 直连
+  - DOMAIN-SUFFIX,12306.cn,🏠 直连
+  - DOMAIN-SUFFIX,govapp.cn,🏠 直连
+
+  - DOMAIN-SUFFIX,10086.cn,🏠 直连
+  - DOMAIN-SUFFIX,10010.com,🏠 直连
+  - DOMAIN-SUFFIX,189.cn,🏠 直连
+  - DOMAIN-SUFFIX,chinamobile.com,🏠 直连
+  - DOMAIN-SUFFIX,chinaunicom.com,🏠 直连
+  - DOMAIN-SUFFIX,chinatelecom.com.cn,🏠 直连
+
+  - DOMAIN-SUFFIX,mi.com,🏠 直连
+  - DOMAIN-SUFFIX,miui.com,🏠 直连
+  - DOMAIN-SUFFIX,xiaomi.com,🏠 直连
+  - DOMAIN-SUFFIX,xiaomicp.com,🏠 直连
+  - DOMAIN-SUFFIX,miot-spec.com,🏠 直连
+
+  - DOMAIN-SUFFIX,qidian.com,🏠 直连
+  - DOMAIN-SUFFIX,qdmm.com,🏠 直连
+  - DOMAIN-SUFFIX,qdwenxue.com,🏠 直连
+  - DOMAIN-SUFFIX,cmfu.com,🏠 直连
+  - DOMAIN-SUFFIX,yuewen.com,🏠 直连
+  - DOMAIN-SUFFIX,jjwxc.net,🏠 直连
+  - DOMAIN-SUFFIX,jjwxc.com,🏠 直连
+  - DOMAIN-SUFFIX,fqnovel.com,🏠 直连
+  - DOMAIN-SUFFIX,fqnovelpic.com,🏠 直连
+  - DOMAIN-SUFFIX,qznovelvod.com,🏠 直连
+  - DOMAIN-SUFFIX,fanqiemianfei.com,🏠 直连
+  - DOMAIN-SUFFIX,novelfm.com,🏠 直连
+  - DOMAIN-SUFFIX,wtzw.com,🏠 直连
+  - DOMAIN-SUFFIX,qimao.com,🏠 直连
+  - DOMAIN-SUFFIX,km.com,🏠 直连
+  - DOMAIN-SUFFIX,weread.cn,🏠 直连
+  - DOMAIN-SUFFIX,weread.qq.com,🏠 直连
+  - DOMAIN-SUFFIX,zongheng.com,🏠 直连
+  - DOMAIN-SUFFIX,faloo.com,🏠 直连
+  - DOMAIN-SUFFIX,ciweimao.com,🏠 直连
+  - DOMAIN-SUFFIX,huanleshuke.com,🏠 直连
+  - DOMAIN-SUFFIX,sfacg.com,🏠 直连
+  - DOMAIN-SUFFIX,17k.com,🏠 直连
+
+  - DOMAIN-SUFFIX,sohu.com,🏠 直连
+  - DOMAIN-SUFFIX,sohucs.com,🏠 直连
+  - DOMAIN-SUFFIX,itc.cn,🏠 直连
+  - DOMAIN-SUFFIX,sina.com.cn,🏠 直连
+  - DOMAIN-SUFFIX,sina.cn,🏠 直连
+  - DOMAIN-SUFFIX,sinaimg.cn,🏠 直连
+  - DOMAIN-SUFFIX,163.com,🏠 直连
+  - DOMAIN-SUFFIX,126.net,🏠 直连
+  - DOMAIN-SUFFIX,netease.com,🏠 直连
+  - DOMAIN-SUFFIX,news.qq.com,🏠 直连
+  - DOMAIN-SUFFIX,tencentmind.com,🏠 直连
+  - DOMAIN-SUFFIX,toutiao.com,🏠 直连
+  - DOMAIN-SUFFIX,toutiaocdn.com,🏠 直连
+  - DOMAIN-SUFFIX,thepaper.cn,🏠 直连
+  - DOMAIN-SUFFIX,ifeng.com,🏠 直连
+  - DOMAIN-SUFFIX,ifengimg.com,🏠 直连
+
+  - DOMAIN-SUFFIX,qcloud.com,🏠 直连
+  - DOMAIN-SUFFIX,myqcloud.com,🏠 直连
+  - DOMAIN-SUFFIX,tencentcloud.com,🏠 直连
+  - DOMAIN-SUFFIX,tencent.com,🏠 直连
+
+  - DOMAIN-SUFFIX,huawei.com,🏠 直连
+  - DOMAIN-SUFFIX,hicloud.com,🏠 直连
+  - DOMAIN-SUFFIX,dbankcloud.com,🏠 直连
+  - DOMAIN-SUFFIX,dbankcloud.cn,🏠 直连
+  - DOMAIN-SUFFIX,agconnect.link,🏠 直连
+  - DOMAIN-SUFFIX,honor.com,🏠 直连
+  - DOMAIN-SUFFIX,hihonor.com,🏠 直连
+  - DOMAIN-SUFFIX,hihonorcloud.com,🏠 直连
+  - DOMAIN-SUFFIX,hihonorcloud.cn,🏠 直连
+  - DOMAIN-SUFFIX,honor-cloud.com,🏠 直连
+  - DOMAIN-SUFFIX,honor-cloud.cn,🏠 直连
+  - DOMAIN-SUFFIX,oppo.com,🏠 直连
+  - DOMAIN-SUFFIX,oppo.cn,🏠 直连
+  - DOMAIN-SUFFIX,oppomobile.com,🏠 直连
+  - DOMAIN-SUFFIX,heytap.com,🏠 直连
+  - DOMAIN-SUFFIX,heytapcn.com,🏠 直连
+  - DOMAIN-SUFFIX,heytapcloud.com,🏠 直连
+  - DOMAIN-SUFFIX,heytapdownload.com,🏠 直连
+  - DOMAIN-SUFFIX,nearme.com.cn,🏠 直连
+  - DOMAIN-SUFFIX,vivo.com,🏠 直连
+  - DOMAIN-SUFFIX,vivo.com.cn,🏠 直连
+  - DOMAIN-SUFFIX,vivoglobal.com,🏠 直连
+  - DOMAIN-SUFFIX,meizu.com,🏠 直连
+  - DOMAIN-SUFFIX,flyme.cn,🏠 直连
+
+  - DOMAIN-SUFFIX,mtop.taobao.com,🏠 直连
+  - DOMAIN-SUFFIX,api.m.jd.com,🏠 直连
+
+  - DOMAIN-SUFFIX,edu.cn,🏠 直连
+  - DOMAIN-SUFFIX,cnki.net,🏠 直连
+  - DOMAIN-SUFFIX,wanfangdata.com.cn,🏠 直连
+  - DOMAIN-SUFFIX,cqvip.com,🏠 直连
+  - DOMAIN-SUFFIX,spischolar.com,🏠 直连
+
+  # [STEP 3: 专项服务与国外基础路由]
+  - DOMAIN-SUFFIX,openai.com,🤖 AI服务
+  - DOMAIN-SUFFIX,chatgpt.com,🤖 AI服务
+  - DOMAIN-SUFFIX,oaistatic.com,🤖 AI服务
+  - DOMAIN-SUFFIX,oaiusercontent.com,🤖 AI服务
+  - DOMAIN-SUFFIX,statsig.com,🤖 AI服务
+  - DOMAIN-SUFFIX,identrust.com,🤖 AI服务
+  - DOMAIN-SUFFIX,anthropic.com,🤖 AI服务
+  - DOMAIN-SUFFIX,claude.ai,🤖 AI服务
+  - DOMAIN-SUFFIX,gemini.google.com,🤖 AI服务
+  - DOMAIN-SUFFIX,generativelanguage.googleapis.com,🤖 AI服务
+  - DOMAIN-SUFFIX,vertexai.com,🤖 AI服务
+  - DOMAIN-SUFFIX,ai.com,🤖 AI服务
+
+  - RULE-SET,openai,🤖 AI服务
+  - RULE-SET,claude,🤖 AI服务
+
+  - RULE-SET,tiktok,🎵 TikTok
+
+  - DOMAIN-SUFFIX,googlevideo.com,📺 国际媒体
+  - RULE-SET,youtube,📺 国际媒体
+  - RULE-SET,netflix,📺 国际媒体
+  - RULE-SET,disney,📺 国际媒体
+  - RULE-SET,spotify,📺 国际媒体
+
+  - RULE-SET,china_media,📺 国内媒体
+  - RULE-SET,bilibili,📺 国内媒体
+  - RULE-SET,netease_music,📺 国内媒体
+
+  - DOMAIN-SUFFIX,google.com,🔍 Google服务
+  - DOMAIN-SUFFIX,google.com.hk,🔍 Google服务
+  - DOMAIN-SUFFIX,googleapis.com,🔍 Google服务
+  - DOMAIN-SUFFIX,gstatic.com,🔍 Google服务
+  - DOMAIN-SUFFIX,ggpht.com,🔍 Google服务
+  - DOMAIN-SUFFIX,gvt1.com,🔍 Google服务
+  - RULE-SET,google,🔍 Google服务
+  - RULE-SET,google_loyalsoldier,🔍 Google服务
+
+  - RULE-SET,telegram,📲 Telegram
+  - RULE-SET,telegram_loyalsoldier,📲 Telegram
+  - RULE-SET,telegram_cidr,📲 Telegram,no-resolve
+
+  - RULE-SET,twitter,🚀 节点选择
+  - RULE-SET,facebook,🚀 节点选择
+  - RULE-SET,github,🚀 节点选择
+  - DOMAIN-SUFFIX,intercom.io,🚀 节点选择
+  - DOMAIN-SUFFIX,intercomcdn.com,🚀 节点选择
+  - RULE-SET,proxy_gfw,🚀 节点选择
+
+  # [STEP 4: 系统、游戏平台与厂商商店]
+  - DOMAIN-SUFFIX,apple.com.cn,🏠 直连
+  - DOMAIN-SUFFIX,apple.cn,🏠 直连
+  - DOMAIN-SUFFIX,msftconnecttest.com,🏠 直连
+  - DOMAIN-SUFFIX,msftncsi.com,🏠 直连
+
+  - DOMAIN-SUFFIX,steamcontent.com,🏠 直连
+  - DOMAIN-SUFFIX,steamclient.com,🏠 直连
+  - DOMAIN-SUFFIX,steamstatic.com,🏠 直连
+
+  - RULE-SET,epic,🏠 直连
+  - RULE-SET,nintendo,🏠 直连
+  - RULE-SET,sony,🏠 直连
+  - RULE-SET,xbox,🏠 直连
+
+  - DOMAIN-SUFFIX,steamcommunity.com,🚀 节点选择
+  - DOMAIN-SUFFIX,steamcommunity.cn,🚀 节点选择
+  - DOMAIN-SUFFIX,steampowered.com,🚀 节点选择
+  - DOMAIN-KEYWORD,steamcommunity,🚀 节点选择
+
+  - RULE-SET,apple,🍎 苹果服务
+  - RULE-SET,apple_loyalsoldier,🍎 苹果服务
+  - DOMAIN-SUFFIX,microsoft.com,💻 微软服务
+  - DOMAIN-SUFFIX,microsoftonline.com,💻 微软服务
+  - RULE-SET,microsoft,💻 微软服务
+  - RULE-SET,steam,🎮 游戏服务
+
+  # [STEP 5: 三层国内防漏网]
+  - RULE-SET,private,🏠 直连
+  - RULE-SET,direct,🏠 直连
+  - RULE-SET,china_max,🏠 直连
+
+  - RULE-SET,lancidr,🏠 直连,no-resolve
+  - RULE-SET,cncidr,🏠 直连,no-resolve
+  - RULE-SET,china_company_ip,🏠 直连,no-resolve
+  - RULE-SET,china_ip,🏠 直连,no-resolve
+
+  - GEOIP,CN,🏠 直连,no-resolve
+
+  # [STEP 6: 最终兜底]
+  - MATCH,🐟 漏网之鱼
