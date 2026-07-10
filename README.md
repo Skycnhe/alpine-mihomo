@@ -34,10 +34,7 @@ Meta）一键部署、运行与维护方案。脚本基于 OpenRC 初始化系�
 
 快速开始
 
-如果您希望在下载脚本的同时直接绑定您存放在 GitHub 上的个性化配置文件，无需手动编辑脚本，可以直接在 Alpine 终端执行以下一键命令（请将命令中的
-您的配置文件URL 替换为真实的 Raw 链接，将管理脚本链接替换为您实际托管的脚本链接）：
-
-wget -qO mihomo_manager.sh https://raw.githubusercontent.com/你的用户名/你的仓库/main/mihomo_manager.sh && sed -i 's|CUSTOM_TEMPLATE_URL=.*|CUSTOM_TEMPLATE_URL="您的配置文件URL"|' mihomo_manager.sh && chmod +x mihomo_manager.sh && ./mihomo_manager.sh
+SCRIPT_URL="https://raw.githubusercontent.com/Skycnhe/alpine-mihomo/refs/heads/Hk001/mihomo.sh" sh -c 'wget -qO mihomo_manager.sh "$SCRIPT_URL" && sed -i "s|CUSTOM_TEMPLATE_URL=.*|CUSTOM_TEMPLATE_URL=\"$CONFIG_URL\"|" mihomo_manager.sh && chmod +x mihomo_manager.sh && ./mihomo_manager.sh'
 
 命令解析：此命令利用 Alpine 内置的 wget 下载管理脚本，随后通过 sed 自动将您指定的配置直链替换写入脚本中，最后赋予执行权限并直接运行。
 
