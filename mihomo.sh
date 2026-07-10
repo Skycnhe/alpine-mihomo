@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # =====================================================================
-#  Mihomo (Clash Meta) Alpine Linux & LXC 整合管理脚本 (含自动换源版)
+#  Mihomo (Clash Meta) Alpine Linux & LXC 整合管理脚本 (指定 gh-proxy 版)
 # =====================================================================
 
 # 字体颜色定义
@@ -30,7 +30,23 @@ BINARY_PATH="/usr/local/bin/mihomo"
 SERVICE_PATH="/etc/init.d/mihomo"
 GH_PROXY=""
 
-# 新增功能：自动/手动更换 Alpine 软件源 (APK 源)
+# 设置/清除 GitHub 代理 (已指定为 https://gh-proxy.com/)
+set_proxy() {
+    echo -e "${YELLOW}选择下载源加速（主要针对国内环境）：${NC}"
+    echo "1. 使用 https://gh-proxy.com/ 代理 (推荐)"
+    echo "2. 直接从 GitHub 官方下载"
+    echo -n "请选择 [1-2]: "
+    read -r PROXY_OPT
+    if [ "$PROXY_OPT" = "1" ]; then
+        GH_PROXY="https://gh-proxy.com/"
+        echo -e "${GREEN}✔ 已启用 https://gh-proxy.com/ 加速下载。${NC}"
+    else
+        GH_PROXY=""
+        echo -e "${BLUE}已选择直接从 GitHub 官方拉取。${NC}"
+    fi
+}
+
+# 自动更换 Alpine 软件源 (APK 源)
 change_alpine_mirror() {
     echo -e "${YELLOW}检测到您正在准备安装依赖，是否需要将 Alpine APK 软件源替换为国内加速镜像源？${NC}"
     echo "1. 替换为 清华大学 (Tsinghua) 镜像源 [推荐]"
@@ -41,7 +57,6 @@ change_alpine_mirror() {
     read -r MIRROR_OPT
     case "$MIRROR_OPT" in
         1)
-            # 安全替换，保留系统原本的版本号（如 v3.18 / v3.20 / edge）
             sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/repositories
             echo -e "${GREEN}✔ 已成功将系统 APK 源替换为【清华大学】镜像源。${NC}"
             ;;
@@ -59,24 +74,9 @@ change_alpine_mirror() {
     esac
 }
 
-# 设置/清除 GitHub 代理
-set_proxy() {
-    echo -e "${YELLOW}选择下载源加速（主要针对国内环境）：${NC}"
-    echo "1. 使用 mirror.ghproxy.com 代理 (推荐)"
-    echo "2. 直接从 GitHub 官方下载"
-    echo -n "请选择 [1-2]: "
-    read -r PROXY_OPT
-    if [ "$PROXY_OPT" = "1" ]; then
-        GH_PROXY="https://mirror.ghproxy.com/"
-    else
-        GH_PROXY=""
-    fi
-}
-
 # 自动下载缺少的系统软件与依赖
 install_dependencies() {
     echo -e "${BLUE}正在同步 APK 软件包并安装依赖 (curl, gzip, unzip, ca-certificates)...${NC}"
-    # 更新源索引并安装必要依赖，防止因精简系统缺少组件报错
     apk update >/dev/null 2>&1
     apk add --no-cache curl gzip unzip ca-certificates tzdata >/dev/null 2>&1
     if [ $? -ne 0 ]; then
@@ -91,12 +91,11 @@ detect_arch() {
     ARCH_RAW=$(uname -m)
     case "${ARCH_RAW}" in
         x86_64) 
-            # 兼容版不限制高版本指令集，完美规避 LXC 容器内 Illegal instruction (非法指令) 报错 [1]
             ARCH="amd64-compatible" 
             ;; 
         aarch64|arm64) 
             ARCH="arm64" 
-            ;; # ARMv8 设备支持 AArch64 原生内核
+            ;;
         armv7l|armv7) 
             ARCH="armv7" 
             ;;
@@ -126,6 +125,7 @@ get_latest_version() {
 # 下载并替换内核二进制
 download_binary() {
     echo -e "${BLUE}正在下载运行文件 (${ARCH})...${NC}"
+    # 使用指定的 https://gh-proxy.com/ 代理下载核心
     DOWNLOAD_URL="${GH_PROXY}https://github.com/MetaCubeX/mihomo/releases/download/${LATEST_TAG}/mihomo-linux-${ARCH}-${LATEST_TAG}.gz"
     
     curl -L -o /tmp/mihomo.gz "${DOWNLOAD_URL}"
@@ -213,9 +213,9 @@ EOF
 
 # 1. 主安装流程
 install_mihomo() {
-    change_alpine_mirror  # 执行依赖下载前，提供换源引导
+    change_alpine_mirror  
     set_proxy
-    install_dependencies  # 执行依赖检测与自动安装
+    install_dependencies  
     detect_arch
     get_latest_version
     download_binary
@@ -296,9 +296,9 @@ check_config_syntax() {
     echo -e "${BLUE}正在校验 ${CONFIG_FILE} 文件语法合法性...${NC}"
     "${BINARY_PATH}" -t -d "${CONFIG_DIR}"
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✔ [Success] 配置文件语法校验通过，无任何语法错误！${NC}"
+         echo -e "${GREEN}✔ [Success] 配置文件语法校验通过，无任何语法错误！${NC}"
     else
-        echo -e "${RED}✘ [Error] 配置文件校验未通过，请按上面输出的提示进行修正。${NC}"
+         echo -e "${RED}✘ [Error] 配置文件校验未通过，请按上面输出的提示进行修正。${NC}"
     fi
 }
 
@@ -309,6 +309,7 @@ install_dashboard() {
     set_proxy
     
     UI_DIR="${CONFIG_DIR}/ui"
+    # 使用指定的 https://gh-proxy.com/ 代理下载面板
     ZIP_URL="${GH_PROXY}https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip"
     
     echo -e "${BLUE}正在下载 MetaCubeXD 面板静态包...${NC}"
@@ -352,6 +353,7 @@ download_geodata() {
     set_proxy
     echo -e "${BLUE}准备从 MetaCubeX 数据库同步 Geodata 规则库...${NC}"
     
+    # 同步通过指定的 https://gh-proxy.com/ 代理拉取 Geodata 资源
     GEOIP_URL="${GH_PROXY}https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat"
     GEOSITE_URL="${GH_PROXY}https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
     MMDB_URL="${GH_PROXY}https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country-lite.mmdb"
@@ -370,7 +372,6 @@ download_geodata() {
 enable_tun_mode() {
     echo -e "${BLUE}开始配置系统级 TUN 模式支持...${NC}"
     
-    # 1. 检测 /dev/net/tun 设备（对 LXC 容器环境极度关键）
     if [ ! -c /dev/net/tun ]; then
         echo -e "${BLUE}正在尝试手动加载 tun 内核模块...${NC}"
         modprobe tun >/dev/null 2>&1
@@ -391,7 +392,6 @@ enable_tun_mode() {
         echo -e "${GREEN}✔ 已确认系统存在 /dev/net/tun 设备。${NC}"
     fi
     
-    # 2. 写入开机自动加载 modules 模块
     if [ -f /etc/modules ]; then
         if ! grep -q "^tun" /etc/modules; then
             echo "tun" >> /etc/modules
@@ -399,12 +399,9 @@ enable_tun_mode() {
         fi
     fi
     
-    # 3. 开启 IPv4/IPv6 IP 转发功能（实现作为局域网网关）
     echo -e "${BLUE}正在开启系统内核转发 (IP Forwarding)...${NC}"
-    # 临时生效
     sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1
     sysctl -w net.ipv6.conf.all.forwarding=1 >/dev/null 2>&1
-    # 永久生效 (兼容 LXC 只读配置，静默写入)
     for key in "net.ipv4.ip_forward" "net.ipv6.conf.all.forwarding"; do
         if grep -q "^${key}" /etc/sysctl.conf; then
             sed -i "s/^${key}.*/${key} = 1/" /etc/sysctl.conf
@@ -414,16 +411,13 @@ enable_tun_mode() {
     done
     echo -e "${GREEN}✔ 系统内核 IP 转发已永久开启（修改 sysctl.conf 完成）。${NC}"
     
-    # 4. 自动向 config.yaml 追加 TUN 模式配置块
     if [ ! -f "${CONFIG_FILE}" ]; then
         setup_config
     fi
     
-    # 备份当前配置防止误操作损坏
     cp "${CONFIG_FILE}" "${CONFIG_FILE}.bak"
     echo -e "${YELLOW}已为您备份当前配置文件至 ${CONFIG_FILE}.bak${NC}"
     
-    # 检测是否已经包含 tun 条目，防止重复追加
     if grep -q "^tun:" "${CONFIG_FILE}"; then
         echo -e "${YELLOW}检测到您当前的 config.yaml 中已经包含 'tun:' 标记，脚本已跳过自动追加。${NC}"
         echo -e "${YELLOW}请手动确认其中的配置已经含有: enable: true 且 auto-route: true。${NC}"
@@ -456,7 +450,6 @@ EOF
         echo -e "${GREEN}✔ 成功将 TUN 模式与高性能内置 DNS 规则追加到：${CONFIG_FILE}${NC}"
     fi
     
-    # 5. 校验新配置文件结构
     check_config_syntax
     
     echo -e "\n${GREEN}TUN 模式一键开启与适配成功！${NC}"
@@ -510,7 +503,7 @@ uninstall_mihomo() {
     esac
 }
 
-# 手动执行换源服务入口 (方便用户在日常维护中自主切换)
+# 手动执行换源服务入口
 manual_change_mirror() {
     change_alpine_mirror
     echo -e "${BLUE}正在使用新源进行索引测试...${NC}"
