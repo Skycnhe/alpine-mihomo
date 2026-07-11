@@ -28,6 +28,7 @@ CONFIG_DIR="/etc/mihomo"
 CONFIG_FILE="${CONFIG_DIR}/config.yaml"
 BINARY_PATH="/usr/local/bin/mihomo"
 SERVICE_PATH="/etc/init.d/mihomo"
+SHORTCUT_PATH="/usr/local/bin/mm"
 GH_PROXY=""
 
 # 设置/清除 GitHub 代理 (已指定为 https://gh-proxy.com/)
@@ -211,6 +212,17 @@ EOF
     fi
 }
 
+# 创建快捷命令 mm
+add_shortcut() {
+    if [ -f "$0" ]; then
+        cp "$0" "${SHORTCUT_PATH}"
+        chmod +x "${SHORTCUT_PATH}"
+        echo -e "${GREEN}✔ 快捷命令创建成功：可通过在终端输入 'mm' 快速启动此管理面板。${NC}"
+    else
+        echo -e "${YELLOW}提示：由于当前运行环境限制（如通过管道直接运行），未能自动创建快捷命令。若已保存为本地文件运行则可自动创建。${NC}"
+    fi
+}
+
 # 1. 主安装流程
 install_mihomo() {
     change_alpine_mirror  
@@ -221,6 +233,7 @@ install_mihomo() {
     download_binary
     create_service
     setup_config
+    add_shortcut
     echo -e "\n${GREEN}===============================================${NC}"
     echo -e "${GREEN}            Mihomo 一键部署安装完成！           ${NC}"
     echo -e "${GREEN}===============================================${NC}"
@@ -487,6 +500,7 @@ uninstall_mihomo() {
             rc-update del mihomo default >/dev/null 2>&1
             rm -f "${BINARY_PATH}"
             rm -f "${SERVICE_PATH}"
+            rm -f "${SHORTCUT_PATH}"
             rm -f /var/log/mihomo.log
             
             echo -e "${RED}是否同时删除本地配置文件和面板目录 (${CONFIG_DIR})？ [y/N]: ${NC}"
