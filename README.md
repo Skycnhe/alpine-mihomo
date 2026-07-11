@@ -33,9 +33,13 @@ Meta）一键部署、运行与维护方案。脚本基于 OpenRC 初始化系�
 | /var/log/mihomo.log     | 运行日志文件         |
 
 快速开始
+
 国外
+
 curl -sSL -o mihomo.sh https://raw.githubusercontent.com/Skycnhe/alpine-mihomo/refs/heads/Hk001/mihomo.sh && chmod +x mihomo.sh && ./mihomo.sh
+
 国内
+
 curl -sSL -o mihomo.sh http://kr1-proxy.gitwarp.top:8081/https://raw.githubusercontent.com/Skycnhe/alpine-mihomo/refs/heads/Hk001/mihomo.sh
 
 命令行服务管理（启动、停止、重启）
