@@ -182,12 +182,22 @@ EOF
     echo -e "${GREEN}已将 Mihomo 注册至系统自启动级别 (default)。${NC}"
 }
 
-# 创建基础默认配置
+# 从您指定的 GitHub URL 拉取配置模板
 setup_config() {
     mkdir -p "${CONFIG_DIR}"
     if [ ! -f "${CONFIG_FILE}" ]; then
-        cat << 'EOF' > "${CONFIG_FILE}"
-# Alpine Mihomo 基础配置模版
+        echo -e "${BLUE}正在拉取指定的配置模板...${NC}"
+        
+        # 使用用户选择的代理下载模板配置
+        TEMPLATE_URL="${GH_PROXY}https://raw.githubusercontent.com/Skycnhe/alpine-mihomo/refs/heads/Hk001/Configuration%20profile/config.yaml"
+        
+        curl -L -s --connect-timeout 10 -o "${CONFIG_FILE}" "${TEMPLATE_URL}"
+        
+        # 校验下载是否成功且大小合理，否则使用备用极简配置防止报错
+        if [ ! -f "${CONFIG_FILE}" ] || [ $(wc -c < "${CONFIG_FILE}") -lt 200 ]; then
+            echo -e "${RED}❌ 在线模板拉取失败或模板不合规（可能由于网络原因），正在创建极简备用配置兜底...${NC}"
+            cat << 'EOF' > "${CONFIG_FILE}"
+# 备用本地配置模版
 mixed-port: 7890
 allow-lan: true
 mode: rule
@@ -208,7 +218,12 @@ proxy-groups:
 rules:
   - MATCH,Proxy
 EOF
-        echo -e "${GREEN}已为您创建初始模板配置：${CONFIG_FILE}${NC}"
+            echo -e "${YELLOW}✔ 已写入备用配置。您稍后可以尝试手动更新配置文件。${NC}"
+        else
+            echo -e "${GREEN}✔ 已成功下载并应用您指定的在线配置模板！${NC}"
+        fi
+    else
+        echo -e "${BLUE}配置文件 ${CONFIG_FILE} 已存在，跳过覆盖。${NC}"
     fi
 }
 
