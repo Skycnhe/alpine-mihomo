@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # =====================================================================
-#  Mihomo (Clash Meta) Alpine Linux & LXC 整合管理脚本 (指定 gh-proxy 版)
+#  Mihomo (Clash Meta) Alpine Linux & LXC 整合管理脚本 (多面板选择版)
 # =====================================================================
 
 # 字体颜色定义
@@ -111,7 +111,7 @@ detect_arch() {
     echo -e "${GREEN}检测到系统架构: ${ARCH_RAW} -> 适配内核: ${ARCH}${NC}"
 }
 
-# 获取最新 Mihomo 版本号
+# 获取最新 Mihomo Version
 get_latest_version() {
     echo -e "${BLUE}正在从 GitHub 获取最新内核版本...${NC}"
     LATEST_TAG=$(curl -s --connect-timeout 5 https://api.github.com/repos/MetaCubeX/mihomo/releases/latest | grep -oE '"tag_name": "[^"]+"' | head -n1 | cut -d'"' -f4)
@@ -330,38 +330,74 @@ check_config_syntax() {
     fi
 }
 
-# 5. 安装/更新官方 MetaCubeXD 仪表盘
+# 5. 安装/更新 Web 仪表盘 (多面板选择支持)
 install_dashboard() {
+    echo -e "${YELLOW}选择要安装的 Web 仪表盘面板：${NC}"
+    echo "1. MetaCubeXD 面板 (Mihomo 推荐，功能极其丰富)"
+    echo "2. Yacd-meta 面板 (经典 Yacd 修改版，适配 Clash Meta/Mihomo 规则)"
+    echo "3. Clash-dashboard 面板 (传统经典面板，极简轻量)"
+    echo "4. Zashboard 面板 (现代化、响应式，体验出色的新生代多后端面板)"
+    echo "5. 返回主菜单"
+    echo -n "请选择 [1-5]: "
+    read -r DB_OPT
+
+    case "$DB_OPT" in
+        1)
+            DB_NAME="MetaCubeXD"
+            REPO_URL="https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip"
+            DIR_NAME="metacubexd-gh-pages"
+            ;;
+        2)
+            DB_NAME="Yacd-meta"
+            REPO_URL="https://github.com/MetaCubeX/Yacd-meta/archive/refs/heads/gh-pages.zip"
+            DIR_NAME="Yacd-meta-gh-pages"
+            ;;
+        3)
+            DB_NAME="Clash-dashboard"
+            REPO_URL="https://github.com/Dreamacro/clash-dashboard/archive/refs/heads/gh-pages.zip"
+            DIR_NAME="clash-dashboard-gh-pages"
+            ;;
+        4)
+            DB_NAME="Zashboard"
+            REPO_URL="https://github.com/Zephyruso/zashboard/archive/refs/heads/gh-pages.zip"
+            DIR_NAME="zashboard-gh-pages"
+            ;;
+        *)
+            echo -e "${BLUE}已取消面板安装。${NC}"
+            return
+            ;;
+    esac
+
     echo -e "${BLUE}正在处理 Web UI 仪表盘依赖...${NC}"
     apk add --no-cache unzip >/dev/null 2>&1
     set_proxy
     
     UI_DIR="${CONFIG_DIR}/ui"
-    # 使用指定的 https://gh-proxy.com/ 代理下载面板
-    ZIP_URL="${GH_PROXY}https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip"
+    # 使用用户选择的代理下载所选的面板
+    ZIP_URL="${GH_PROXY}${REPO_URL}"
     
-    echo -e "${BLUE}正在下载 MetaCubeXD 面板静态包...${NC}"
-    curl -L -o /tmp/metacubexd.zip "${ZIP_URL}"
+    echo -e "${BLUE}正在下载 ${DB_NAME} 面板静态包...${NC}"
+    curl -L -o /tmp/dashboard_temp.zip "${ZIP_URL}"
     
-    if [ ! -f /tmp/metacubexd.zip ] || [ $(wc -c < /tmp/metacubexd.zip) -lt 5000 ]; then
+    if [ ! -f /tmp/dashboard_temp.zip ] || [ $(wc -c < /tmp/dashboard_temp.zip) -lt 5000 ]; then
          echo -e "${RED}下载仪表盘资源包失败，请检查网络或更换加速代理重试。${NC}"
-         rm -f /tmp/metacubexd.zip
+         rm -f /tmp/dashboard_temp.zip
          return
     fi
     
     echo -e "${BLUE}正在进行解压和部署...${NC}"
-    unzip -q -o /tmp/metacubexd.zip -d /tmp
+    unzip -q -o /tmp/dashboard_temp.zip -d /tmp
     
-    if [ -d "/tmp/metacubexd-gh-pages" ]; then
+    if [ -d "/tmp/${DIR_NAME}" ]; then
          rm -rf "${UI_DIR}"
-         mv "/tmp/metacubexd-gh-pages" "${UI_DIR}"
-         echo -e "${GREEN}Web 仪表盘已成功部署于：${UI_DIR}${NC}"
+         mv "/tmp/${DIR_NAME}" "${UI_DIR}"
+         echo -e "${GREEN}Web 仪表盘 (${DB_NAME}) 已成功部署于：${UI_DIR}${NC}"
     else
          echo -e "${RED}面板提取资源失败，包结构可能不合规。${NC}"
-         rm -f /tmp/metacubexd.zip
+         rm -rf "/tmp/${DIR_NAME}" /tmp/dashboard_temp.zip
          return
     fi
-    rm -f /tmp/metacubexd.zip
+    rm -f /tmp/dashboard_temp.zip
     
     if [ -f "${CONFIG_FILE}" ]; then
          if grep -q "external-ui:" "${CONFIG_FILE}"; then
@@ -569,7 +605,7 @@ show_menu() {
     echo -e "  2.  在线检测并升级内核"
     echo -e "  3.  导入在线配置文件 / 订阅链接"
     echo -e "  4.  一键校验当前配置文件语法"
-    echo -e "  5.  安装/升级 Web 仪表盘 (MetaCubeXD)"
+    echo -e "  5.  安装/升级 Web 仪表盘 (支持多种面板选择)"
     echo -e "  6.  同步/更新 Geo 数据规则库 (GeoIP/GeoSite)"
     echo -e "  7.  一键配置并开启系统级 TUN 模式支持 (核心功能)"
     echo -e "  8.  手动更换/恢复 Alpine 系统 APK 软件源"
