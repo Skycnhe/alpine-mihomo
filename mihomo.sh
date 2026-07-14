@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # =====================================================================
-#  Mihomo (Clash Meta) Alpine Linux & LXC 整合管理脚本 (多面板选择版)
+#  Mihomo (Clash Meta) Alpine Linux & LXC 整合管理脚本 (多面板/多内核选择版)
 # =====================================================================
 
 # 字体颜色定义
@@ -30,8 +30,25 @@ BINARY_PATH="/usr/local/bin/mihomo"
 SERVICE_PATH="/etc/init.d/mihomo"
 SHORTCUT_PATH="/usr/local/bin/mm"
 GH_PROXY=""
+KERNEL_TYPE="standard" # 默认内核类型: standard (官方正式版) / party (Party兼容/Alpha版)
 
-# 设置/清除 GitHub 代理 (已指定为 https://gh-proxy.com/)
+# 选择内核类型
+choose_kernel_type() {
+    echo -e "${YELLOW}请选择需要安装/更新的内核版本类型：${NC}"
+    echo "1. Alpine-Mihomo (MetaCubeX 官方正式版，推荐生产环境稳定运行)"
+    echo "2. Mihomo Party 兼容内核 (使用 MetaCubeX Alpha/Prerelease 分支，支持更多新特性)"
+    echo -n "请选择 [1-2]: "
+    read -r KERNEL_OPT
+    if [ "$KERNEL_OPT" = "2" ]; then
+        KERNEL_TYPE="party"
+        echo -e "${GREEN}✔ 已选择 Mihomo Party 兼容内核 (Alpha 分支)。${NC}"
+    else
+        KERNEL_TYPE="standard"
+        echo -e "${BLUE}已选择 Alpine-Mihomo 官方正式版内核。${NC}"
+    fi
+}
+
+# 设置/清除 GitHub 代理
 set_proxy() {
     echo -e "${YELLOW}选择下载源加速（主要针对国内环境）：${NC}"
     echo "1. 使用 https://gh-proxy.com/ 代理 (推荐)"
@@ -47,7 +64,7 @@ set_proxy() {
     fi
 }
 
-# 自动更换 Alpine 软件源 (APK 源)
+# 自动更换 Alpine 软件源
 change_alpine_mirror() {
     echo -e "${YELLOW}检测到您正在准备安装依赖，是否需要将 Alpine APK 软件源替换为国内加速镜像源？${NC}"
     echo "1. 替换为 清华大学 (Tsinghua) 镜像源 [推荐]"
@@ -114,19 +131,30 @@ detect_arch() {
 # 获取最新 Mihomo Version
 get_latest_version() {
     echo -e "${BLUE}正在从 GitHub 获取最新内核版本...${NC}"
-    LATEST_TAG=$(curl -s --connect-timeout 5 https://api.github.com/repos/MetaCubeX/mihomo/releases/latest | grep -oE '"tag_name": "[^"]+"' | head -n1 | cut -d'"' -f4)
-    if [ -z "$LATEST_TAG" ]; then
-        LATEST_TAG="v1.19.28" # 默认 fallback 稳定版
-        echo -e "${YELLOW}动态获取失败，将使用内置兜底版本: ${LATEST_TAG}${NC}"
+    if [ "$KERNEL_TYPE" = "party" ]; then
+        # 获取最新的 Release (包含 Alpha/Pre-release 标记)
+        LATEST_TAG=$(curl -s --connect-timeout 5 https://api.github.com/repos/MetaCubeX/mihomo/releases | grep -oE '"tag_name": "[^"]+"' | head -n1 | cut -d'"' -f4)
+        if [ -z "$LATEST_TAG" ]; then
+            LATEST_TAG="alpha-g897813a" # 默认 Alpha fallback 版本
+            echo -e "${YELLOW}动态获取失败，将使用内置 Alpha 兜底版本: ${LATEST_TAG}${NC}"
+        else
+            echo -e "${GREEN}获取到最新 Alpha 兼容版本: ${LATEST_TAG}${NC}"
+        fi
     else
-        echo -e "${GREEN}获取到最新版本: ${LATEST_TAG}${NC}"
+        # 获取最新正式 Release 稳定版
+        LATEST_TAG=$(curl -s --connect-timeout 5 https://api.github.com/repos/MetaCubeX/mihomo/releases/latest | grep -oE '"tag_name": "[^"]+"' | head -n1 | cut -d'"' -f4)
+        if [ -z "$LATEST_TAG" ]; then
+            LATEST_TAG="v1.19.28" # 默认 fallback 稳定版
+            echo -e "${YELLOW}动态获取失败，将使用内置稳定版兜底: ${LATEST_TAG}${NC}"
+        else
+            echo -e "${GREEN}获取到最新正式版本: ${LATEST_TAG}${NC}"
+        fi
     fi
 }
 
 # 下载并替换内核二进制
 download_binary() {
     echo -e "${BLUE}正在下载运行文件 (${ARCH})...${NC}"
-    # 使用指定的 https://gh-proxy.com/ 代理下载核心
     DOWNLOAD_URL="${GH_PROXY}https://github.com/MetaCubeX/mihomo/releases/download/${LATEST_TAG}/mihomo-linux-${ARCH}-${LATEST_TAG}.gz"
     
     curl -L -o /tmp/mihomo.gz "${DOWNLOAD_URL}"
@@ -188,14 +216,12 @@ setup_config() {
     if [ ! -f "${CONFIG_FILE}" ]; then
         echo -e "${BLUE}正在拉取指定的配置模板...${NC}"
         
-        # 使用用户选择的代理下载模板配置
         TEMPLATE_URL="${GH_PROXY}https://raw.githubusercontent.com/Skycnhe/alpine-mihomo/refs/heads/Hk001/Configuration%20profile/config.yaml"
         
         curl -L -s --connect-timeout 10 -o "${CONFIG_FILE}" "${TEMPLATE_URL}"
         
-        # 校验下载是否成功且大小合理，否则使用备用极简配置防止报错
         if [ ! -f "${CONFIG_FILE}" ] || [ $(wc -c < "${CONFIG_FILE}") -lt 200 ]; then
-            echo -e "${RED}❌ 在线模板拉取失败或模板不合规（可能由于网络原因），正在创建极简备用配置兜底...${NC}"
+            echo -e "${RED}❌ 在线模板拉取失败或模板不合规，正在创建极简备用配置兜底...${NC}"
             cat << 'EOF' > "${CONFIG_FILE}"
 # 备用本地配置模版
 mixed-port: 7890
@@ -234,13 +260,14 @@ add_shortcut() {
         chmod +x "${SHORTCUT_PATH}"
         echo -e "${GREEN}✔ 快捷命令创建成功：可通过在终端输入 'mm' 快速启动此管理面板。${NC}"
     else
-        echo -e "${YELLOW}提示：由于当前运行环境限制（如通过管道直接运行），未能自动创建快捷命令。若已保存为本地文件运行则可自动创建。${NC}"
+        echo -e "${YELLOW}提示：由于当前运行环境限制，未能自动创建快捷命令。${NC}"
     fi
 }
 
 # 1. 主安装流程
 install_mihomo() {
     change_alpine_mirror  
+    choose_kernel_type
     set_proxy
     install_dependencies  
     detect_arch
@@ -260,6 +287,7 @@ update_mihomo() {
         echo -e "${RED}检测到您未安装 Mihomo，请先执行“1”进行安装。${NC}"
         return
     fi
+    choose_kernel_type
     set_proxy
     detect_arch
     get_latest_version
@@ -330,7 +358,7 @@ check_config_syntax() {
     fi
 }
 
-# 5. 安装/更新 Web 仪表盘 (多面板选择支持)
+# 5. 安装/更新 Web 仪表盘
 install_dashboard() {
     echo -e "${YELLOW}选择要安装的 Web 仪表盘面板：${NC}"
     echo "1. MetaCubeXD 面板 (Mihomo 推荐，功能极其丰富)"
@@ -373,7 +401,6 @@ install_dashboard() {
     set_proxy
     
     UI_DIR="${CONFIG_DIR}/ui"
-    # 使用用户选择的代理下载所选的面板
     ZIP_URL="${GH_PROXY}${REPO_URL}"
     
     echo -e "${BLUE}正在下载 ${DB_NAME} 面板静态包...${NC}"
@@ -417,7 +444,6 @@ download_geodata() {
     set_proxy
     echo -e "${BLUE}准备从 MetaCubeX 数据库同步 Geodata 规则库...${NC}"
     
-    # 同步通过指定的 https://gh-proxy.com/ 代理拉取 Geodata 资源
     GEOIP_URL="${GH_PROXY}https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat"
     GEOSITE_URL="${GH_PROXY}https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
     MMDB_URL="${GH_PROXY}https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country-lite.mmdb"
@@ -601,8 +627,8 @@ show_menu() {
     echo -e "  服务状态: ${STATUS_TEXT}    |  已装版本: ${BLUE}${VERSION_TEXT}${NC}"
     echo -e "  主配置文件: ${CONFIG_FILE}"
     echo -e "${GREEN}====================================================${NC}"
-    echo -e "  1.  安装部署 Mihomo (包含系统自动换源与缺失依赖下载)"
-    echo -e "  2.  在线检测并升级内核"
+    echo -e "  1.  安装部署 Mihomo (可选内核类型/支持自动换源及补全依赖)"
+    echo -e "  2.  在线检测并升级内核 (可选正式版或 Party/Alpha 兼容版)"
     echo -e "  3.  导入在线配置文件 / 订阅链接"
     echo -e "  4.  一键校验当前配置文件语法"
     echo -e "  5.  安装/升级 Web 仪表盘 (支持多种面板选择)"
