@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # =====================================================================
-#  Mihomo (Clash Meta) Alpine Linux & LXC 整合管理脚本 (多面板/多内核选择版)
+#  Mihomo (Clash Meta) Alpine Linux & LXC 整合管理脚本 (多面板/内核/架构选择版)
 # =====================================================================
 
 # 字体颜色定义
@@ -31,6 +31,7 @@ SERVICE_PATH="/etc/init.d/mihomo"
 SHORTCUT_PATH="/usr/local/bin/mm"
 GH_PROXY=""
 KERNEL_TYPE="standard" # 默认内核类型: standard (官方正式版) / party (Party兼容/Alpha版)
+ARCH=""
 
 # 选择内核类型
 choose_kernel_type() {
@@ -104,8 +105,8 @@ install_dependencies() {
     echo -e "${GREEN}依赖组件准备完毕。${NC}"
 }
 
-# 自动检测 CPU 架构并适配 LXC
-detect_arch() {
+# 自动检测内部实现
+auto_detect_arch() {
     ARCH_RAW=$(uname -m)
     case "${ARCH_RAW}" in
         x86_64) 
@@ -121,30 +122,64 @@ detect_arch() {
             ARCH="386" 
             ;;
         *)
-            echo -e "${RED}不支持的 CPU 架构: ${ARCH_RAW}${NC}"
+            echo -e "${RED}无法自动识别的 CPU 架构: ${ARCH_RAW}，请通过手动选项指定架构。${NC}"
             exit 1
             ;;
     esac
-    echo -e "${GREEN}检测到系统架构: ${ARCH_RAW} -> 适配内核: ${ARCH}${NC}"
+}
+
+# 选择 CPU 架构（自动检测或手动指定）
+detect_arch() {
+    ARCH_RAW=$(uname -m)
+    echo -e "${YELLOW}请选择运行内核的 CPU 架构：${NC}"
+    echo "1. 自动检测并适配 (当前系统检测到: ${ARCH_RAW}) [推荐]"
+    echo "2. 手动选择内核架构"
+    echo -n "请选择 [1-2]: "
+    read -r ARCH_OPT
+
+    if [ "$ARCH_OPT" = "2" ]; then
+        echo -e "\n${YELLOW}请选择具体的内核架构：${NC}"
+        echo "1. amd64-compatible (高兼容 64位，适合绝大多数虚拟机、LXC 容器及旧款 CPU)"
+        echo "2. amd64 (标准 64位)"
+        echo "3. amd64-v3 (现代 64位，支持 AVX2 指令集，性能更优但需要较新的 CPU 支持)"
+        echo "4. arm64 (64位 ARM，如树莓派 4/5、Apple Silicon 或 ARM 云服务器)"
+        echo "5. armv7 (32位 ARM)"
+        echo "6. 386 (32位 Intel/AMD)"
+        echo -n "请选择架构 [1-6]: "
+        read -r ARCH_SEL_OPT
+        case "$ARCH_SEL_OPT" in
+            1) ARCH="amd64-compatible" ;;
+            2) ARCH="amd64" ;;
+            3) ARCH="amd64-v3" ;;
+            4) ARCH="arm64" ;;
+            5) ARCH="armv7" ;;
+            6) ARCH="386" ;;
+            *) 
+                echo -e "${RED}输入无效，默认回退到自动检测。${NC}"
+                auto_detect_arch
+                ;;
+        esac
+    else
+        auto_detect_arch
+    fi
+    echo -e "${GREEN}✔ 确定的内核架构: ${ARCH}${NC}"
 }
 
 # 获取最新 Mihomo Version
 get_latest_version() {
     echo -e "${BLUE}正在从 GitHub 获取最新内核版本...${NC}"
     if [ "$KERNEL_TYPE" = "party" ]; then
-        # 获取最新的 Release (包含 Alpha/Pre-release 标记)
         LATEST_TAG=$(curl -s --connect-timeout 5 https://api.github.com/repos/MetaCubeX/mihomo/releases | grep -oE '"tag_name": "[^"]+"' | head -n1 | cut -d'"' -f4)
         if [ -z "$LATEST_TAG" ]; then
-            LATEST_TAG="alpha-g897813a" # 默认 Alpha fallback 版本
+            LATEST_TAG="alpha-g897813a" 
             echo -e "${YELLOW}动态获取失败，将使用内置 Alpha 兜底版本: ${LATEST_TAG}${NC}"
         else
             echo -e "${GREEN}获取到最新 Alpha 兼容版本: ${LATEST_TAG}${NC}"
         fi
     else
-        # 获取最新正式 Release 稳定版
         LATEST_TAG=$(curl -s --connect-timeout 5 https://api.github.com/repos/MetaCubeX/mihomo/releases/latest | grep -oE '"tag_name": "[^"]+"' | head -n1 | cut -d'"' -f4)
         if [ -z "$LATEST_TAG" ]; then
-            LATEST_TAG="v1.19.28" # 默认 fallback 稳定版
+            LATEST_TAG="v1.19.28" 
             echo -e "${YELLOW}动态获取失败，将使用内置稳定版兜底: ${LATEST_TAG}${NC}"
         else
             echo -e "${GREEN}获取到最新正式版本: ${LATEST_TAG}${NC}"
@@ -268,9 +303,9 @@ add_shortcut() {
 install_mihomo() {
     change_alpine_mirror  
     choose_kernel_type
+    detect_arch
     set_proxy
     install_dependencies  
-    detect_arch
     get_latest_version
     download_binary
     create_service
@@ -288,8 +323,8 @@ update_mihomo() {
         return
     fi
     choose_kernel_type
-    set_proxy
     detect_arch
+    set_proxy
     get_latest_version
     
     CURRENT_VER=$("${BINARY_PATH}" -v | head -n1 | awk '{print $3}')
@@ -627,8 +662,8 @@ show_menu() {
     echo -e "  服务状态: ${STATUS_TEXT}    |  已装版本: ${BLUE}${VERSION_TEXT}${NC}"
     echo -e "  主配置文件: ${CONFIG_FILE}"
     echo -e "${GREEN}====================================================${NC}"
-    echo -e "  1.  安装部署 Mihomo (可选内核类型/支持自动换源及补全依赖)"
-    echo -e "  2.  在线检测并升级内核 (可选正式版或 Party/Alpha 兼容版)"
+    echo -e "  1.  安装部署 Mihomo (可选内核与架构类型/支持自动换源及补全依赖)"
+    echo -e "  2.  在线检测并升级内核 (可选内核与架构/保留原配置)"
     echo -e "  3.  导入在线配置文件 / 订阅链接"
     echo -e "  4.  一键校验当前配置文件语法"
     echo -e "  5.  安装/升级 Web 仪表盘 (支持多种面板选择)"
