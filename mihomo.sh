@@ -31,6 +31,48 @@ SERVICE_PATH="/etc/init.d/mihomo"
 SHORTCUT_PATH="/usr/local/bin/mm"
 GH_PROXY=""
 
+# =====================================================================
+#  自动检测并清理旧脚本 / 更新系统快捷命令 mm
+# =====================================================================
+cleanup_and_update_old_scripts() {
+    # 1. 自动清理当前目录下因多次重复下载而残留的 mihomo.sh.1, mihomo.sh.2 等冗余文件
+    local current_dir="./"
+    for duplicate_file in ${current_dir}mihomo.sh.[0-9]*; do
+        if [ -f "$duplicate_file" ]; then
+            echo -e "${YELLOW}发现历史冗余下载脚本，正在自动清理: ${duplicate_file}${NC}"
+            rm -f "$duplicate_file"
+        fi
+    done
+
+    # 2. 检测并更新已经注册到系统的快捷命令 /usr/local/bin/mm
+    if [ -f "${SHORTCUT_PATH}" ]; then
+        # 如果当前脚本是通过本地文件运行的
+        if [ -f "$0" ] && { [ "$(basename "$0")" = "mihomo.sh" ] || [ "$(basename "$0")" = "mm" ]; }; then
+            # 比较当前运行的脚本与系统快捷方式内容是否一致，不一致则自动覆盖
+            if ! cmp -s "$0" "${SHORTCUT_PATH}"; then
+                echo -e "${YELLOW}检测到当前运行的脚本与系统的 '${SHORTCUT_PATH}' 快捷命令版本不一致。${NC}"
+                echo -e "${BLUE}正在自动使用当前最新脚本覆盖旧快捷命令...${NC}"
+                cp -f "$0" "${SHORTCUT_PATH}"
+                chmod +x "${SHORTCUT_PATH}"
+                echo -e "${GREEN}✔ 快捷命令 'mm' 已成功更新至最新版本！${NC}"
+            fi
+        else
+            # 如果是通过 curl ... | sh 管道在线运行，则直接从 GitHub 拉取最新脚本覆盖
+            echo -e "${YELLOW}检测到系统已安装旧版快捷命令，正在尝试从远端同步最新脚本...${NC}"
+            local remote_script="https://raw.githubusercontent.com/Skycnhe/alpine-mihomo/refs/heads/Hk001/mihomo.sh"
+            
+            if curl -sSL --connect-timeout 8 -o "${SHORTCUT_PATH}.tmp" "${remote_script}"; then
+                mv -f "${SHORTCUT_PATH}.tmp" "${SHORTCUT_PATH}"
+                chmod +x "${SHORTCUT_PATH}"
+                echo -e "${GREEN}✔ 快捷命令 'mm' 已成功从远端同步并更新至最新版本！${NC}"
+            else
+                rm -f "${SHORTCUT_PATH}.tmp"
+                echo -e "${YELLOW}提示：远端同步失败，已保留现有快捷命令。${NC}"
+            fi
+        fi
+    fi
+}
+
 # 设置/清除 GitHub 代理 (已指定为 https://gh-proxy.com/)
 set_proxy() {
     echo -e "${YELLOW}选择下载源加速（主要针对国内环境）：${NC}"
@@ -75,11 +117,11 @@ change_alpine_mirror() {
     esac
 }
 
-# 自动下载缺少的系统软件与依赖
+# 自动下载缺少的系统软件与依赖 (已添加 gcompat 和 iproute2 以提升 Alpine 兼容性)
 install_dependencies() {
-    echo -e "${BLUE}正在同步 APK 软件包并安装依赖 (curl, gzip, unzip, ca-certificates)...${NC}"
+    echo -e "${BLUE}正在同步 APK 软件包并安装依赖 (curl, gzip, unzip, ca-certificates, gcompat, iproute2)...${NC}"
     apk update >/dev/null 2>&1
-    apk add --no-cache curl gzip unzip ca-certificates tzdata >/dev/null 2>&1
+    apk add --no-cache curl gzip unzip ca-certificates tzdata gcompat iproute2 >/dev/null 2>&1
     if [ $? -ne 0 ]; then
         echo -e "${RED}依赖安装失败，请检查您的网络连接或尝试在菜单中先执行换源操作。${NC}"
         exit 1
@@ -126,7 +168,6 @@ get_latest_version() {
 # 下载并替换内核二进制
 download_binary() {
     echo -e "${BLUE}正在下载运行文件 (${ARCH})...${NC}"
-    # 使用指定的 https://gh-proxy.com/ 代理下载核心
     DOWNLOAD_URL="${GH_PROXY}https://github.com/MetaCubeX/mihomo/releases/download/${LATEST_TAG}/mihomo-linux-${ARCH}-${LATEST_TAG}.gz"
     
     curl -L -o /tmp/mihomo.gz "${DOWNLOAD_URL}"
@@ -182,20 +223,17 @@ EOF
     echo -e "${GREEN}已将 Mihomo 注册至系统自启动级别 (default)。${NC}"
 }
 
-# 从您指定的 GitHub URL 拉取配置模板
+# 从指定的 GitHub URL 拉取配置模板
 setup_config() {
     mkdir -p "${CONFIG_DIR}"
     if [ ! -f "${CONFIG_FILE}" ]; then
         echo -e "${BLUE}正在拉取指定的配置模板...${NC}"
-        
-        # 使用用户选择的代理下载模板配置
         TEMPLATE_URL="${GH_PROXY}https://raw.githubusercontent.com/Skycnhe/alpine-mihomo/refs/heads/Hk001/Configuration%20profile/config.yaml"
         
         curl -L -s --connect-timeout 10 -o "${CONFIG_FILE}" "${TEMPLATE_URL}"
         
-        # 校验下载是否成功且大小合理，否则使用备用极简配置防止报错
         if [ ! -f "${CONFIG_FILE}" ] || [ $(wc -c < "${CONFIG_FILE}") -lt 200 ]; then
-            echo -e "${RED}❌ 在线模板拉取失败或模板不合规（可能由于网络原因），正在创建极简备用配置兜底...${NC}"
+            echo -e "${RED}❌ 在线模板拉取失败或模板不合规，正在创建极简备用配置兜底...${NC}"
             cat << 'EOF' > "${CONFIG_FILE}"
 # 备用本地配置模版
 mixed-port: 7890
@@ -229,12 +267,19 @@ EOF
 
 # 创建快捷命令 mm
 add_shortcut() {
-    if [ -f "$0" ]; then
+    if [ -f "$0" ] && [ "$(basename "$0")" = "mihomo.sh" ]; then
         cp "$0" "${SHORTCUT_PATH}"
         chmod +x "${SHORTCUT_PATH}"
         echo -e "${GREEN}✔ 快捷命令创建成功：可通过在终端输入 'mm' 快速启动此管理面板。${NC}"
     else
-        echo -e "${YELLOW}提示：由于当前运行环境限制（如通过管道直接运行），未能自动创建快捷命令。若已保存为本地文件运行则可自动创建。${NC}"
+        # 兼容在线直接管道运行的情况，在线下载最新版作为快捷键
+        echo -e "${BLUE}由于您处于在线运行状态，正在从 GitHub 下载最新版本作为本地快捷命令...${NC}"
+        local remote_script="https://raw.githubusercontent.com/Skycnhe/alpine-mihomo/refs/heads/Hk001/mihomo.sh"
+        curl -sSL -o "${SHORTCUT_PATH}" "${remote_script}"
+        if [ -f "${SHORTCUT_PATH}" ]; then
+            chmod +x "${SHORTCUT_PATH}"
+            echo -e "${GREEN}✔ 快捷命令创建成功：可通过在终端输入 'mm' 快速启动此管理面板。${NC}"
+        fi
     fi
 }
 
@@ -373,7 +418,6 @@ install_dashboard() {
     set_proxy
     
     UI_DIR="${CONFIG_DIR}/ui"
-    # 使用用户选择的代理下载所选的面板
     ZIP_URL="${GH_PROXY}${REPO_URL}"
     
     echo -e "${BLUE}正在下载 ${DB_NAME} 面板静态包...${NC}"
@@ -386,6 +430,8 @@ install_dashboard() {
     fi
     
     echo -e "${BLUE}正在进行解压和部署...${NC}"
+    # 安全起见，解压前彻底清理旧的临时解压文件夹，防止 mv 嵌套路径
+    rm -rf "/tmp/${DIR_NAME}"
     unzip -q -o /tmp/dashboard_temp.zip -d /tmp
     
     if [ -d "/tmp/${DIR_NAME}" ]; then
@@ -417,7 +463,6 @@ download_geodata() {
     set_proxy
     echo -e "${BLUE}准备从 MetaCubeX 数据库同步 Geodata 规则库...${NC}"
     
-    # 同步通过指定的 https://gh-proxy.com/ 代理拉取 Geodata 资源
     GEOIP_URL="${GH_PROXY}https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat"
     GEOSITE_URL="${GH_PROXY}https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
     MMDB_URL="${GH_PROXY}https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country-lite.mmdb"
@@ -621,7 +666,14 @@ show_menu() {
     echo -n "请键入对应项 [1-15]: "
 }
 
-# 循环事件处理
+# =====================================================================
+#  脚本启动入口
+# =====================================================================
+
+# 1. 自动执行旧脚本清理及快捷方式自动更新
+cleanup_and_update_old_scripts
+
+# 2. 进入菜单主循环
 while true; do
     show_menu
     read -r OPTION
@@ -646,4 +698,3 @@ while true; do
     echo -e "\n请按 [回车键] 再次返回主控面板..."
     read -r
 done
-以上一键安装增加内核选择Alpine-Mihomo还是Mihomo Party
