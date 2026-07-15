@@ -4,6 +4,9 @@
 #  Mihomo (Clash Meta) Alpine Linux & LXC 整合管理脚本 (多面板选择版)
 # =====================================================================
 
+# 脚本版本号定义
+SCRIPT_VERSION="1.1.0"
+
 # 字体颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -32,7 +35,7 @@ SHORTCUT_PATH="/usr/local/bin/mm"
 GH_PROXY=""
 
 # =====================================================================
-#  自动检测并清理旧脚本 / 更新系统快捷命令 mm
+#  自动检测并清理旧脚本 / 智能版本比对升级 mm
 # =====================================================================
 cleanup_and_update_old_scripts() {
     # 1. 自动清理当前目录下因多次重复下载而残留的 mihomo.sh.1, mihomo.sh.2 等冗余文件
@@ -44,30 +47,42 @@ cleanup_and_update_old_scripts() {
         fi
     done
 
-    # 2. 检测并更新已经注册到系统的快捷命令 /usr/local/bin/mm
+    # 2. 检测并比对已注册快捷命令 mm 的版本号
     if [ -f "${SHORTCUT_PATH}" ]; then
+        # 读取已安装快捷方式的版本号
+        local installed_version
+        installed_version=$(grep -oE '^SCRIPT_VERSION="[0-9.]+"' "${SHORTCUT_PATH}" | cut -d'"' -f2)
+        [ -z "$installed_version" ] && installed_version="未知"
+
         # 如果当前脚本是通过本地文件运行的
         if [ -f "$0" ] && { [ "$(basename "$0")" = "mihomo.sh" ] || [ "$(basename "$0")" = "mm" ]; }; then
-            # 比较当前运行的脚本与系统快捷方式内容是否一致，不一致则自动覆盖
-            if ! cmp -s "$0" "${SHORTCUT_PATH}"; then
-                echo -e "${YELLOW}检测到当前运行的脚本与系统的 '${SHORTCUT_PATH}' 快捷命令版本不一致。${NC}"
-                echo -e "${BLUE}正在自动使用当前最新脚本覆盖旧快捷命令...${NC}"
+            # 比较版本号或文件内容，不一致则自动覆盖
+            if [ "${SCRIPT_VERSION}" != "${installed_version}" ] || ! cmp -s "$0" "${SHORTCUT_PATH}"; then
+                echo -e "${YELLOW}检测到本地脚本 (v${SCRIPT_VERSION}) 与系统的快捷命令 (v${installed_version}) 版本不一致。${NC}"
+                echo -e "${BLUE}正在自动将快捷命令 'mm' 升级至 v${SCRIPT_VERSION}...${NC}"
                 cp -f "$0" "${SHORTCUT_PATH}"
                 chmod +x "${SHORTCUT_PATH}"
-                echo -e "${GREEN}✔ 快捷命令 'mm' 已成功更新至最新版本！${NC}"
+                echo -e "${GREEN}✔ 快捷命令 'mm' 已成功升级至 v${SCRIPT_VERSION}！${NC}"
             fi
         else
-            # 如果是通过 curl ... | sh 管道在线运行，则直接从 GitHub 拉取最新脚本覆盖
-            echo -e "${YELLOW}检测到系统已安装旧版快捷命令，正在尝试从远端同步最新脚本...${NC}"
+            # 如果是通过管道在线运行，主动抓取远端 GitHub 上的版本号进行比对
             local remote_script="https://raw.githubusercontent.com/Skycnhe/alpine-mihomo/refs/heads/Hk001/mihomo.sh"
+            echo -e "${BLUE}正在检测管理脚本远端版本...${NC}"
             
-            if curl -sSL --connect-timeout 8 -o "${SHORTCUT_PATH}.tmp" "${remote_script}"; then
-                mv -f "${SHORTCUT_PATH}.tmp" "${SHORTCUT_PATH}"
-                chmod +x "${SHORTCUT_PATH}"
-                echo -e "${GREEN}✔ 快捷命令 'mm' 已成功从远端同步并更新至最新版本！${NC}"
-            else
-                rm -f "${SHORTCUT_PATH}.tmp"
-                echo -e "${YELLOW}提示：远端同步失败，已保留现有快捷命令。${NC}"
+            local remote_version
+            remote_version=$(curl -sSL --connect-timeout 5 "${remote_script}" | grep -oE '^SCRIPT_VERSION="[0-9.]+"' | cut -d'"' -f2)
+            
+            if [ -n "$remote_version" ] && [ "${remote_version}" != "${installed_version}" ]; then
+                echo -e "${YELLOW}检测到远端存在更新的管理脚本 (v${remote_version})，当前本地版本 (v${installed_version})。${NC}"
+                echo -e "${BLUE}正在从远端同步最新版管理脚本...${NC}"
+                if curl -sSL --connect-timeout 8 -o "${SHORTCUT_PATH}.tmp" "${remote_script}"; then
+                    mv -f "${SHORTCUT_PATH}.tmp" "${SHORTCUT_PATH}"
+                    chmod +x "${SHORTCUT_PATH}"
+                    echo -e "${GREEN}✔ 快捷命令 'mm' 已成功从远端升级至 v${remote_version}！${NC}"
+                else
+                    rm -f "${SHORTCUT_PATH}.tmp"
+                    echo -e "${RED}❌ 远端同步失败，已保留当前本地快捷命令。${NC}"
+                fi
             fi
         fi
     fi
@@ -117,7 +132,7 @@ change_alpine_mirror() {
     esac
 }
 
-# 自动下载缺少的系统软件与依赖 (已添加 gcompat 和 iproute2 以提升 Alpine 兼容性)
+# 自动下载缺少的系统软件与依赖 (已添加 gcompat 和 iproute2 提升运行兼容性)
 install_dependencies() {
     echo -e "${BLUE}正在同步 APK 软件包并安装依赖 (curl, gzip, unzip, ca-certificates, gcompat, iproute2)...${NC}"
     apk update >/dev/null 2>&1
@@ -272,13 +287,13 @@ add_shortcut() {
         chmod +x "${SHORTCUT_PATH}"
         echo -e "${GREEN}✔ 快捷命令创建成功：可通过在终端输入 'mm' 快速启动此管理面板。${NC}"
     else
-        # 兼容在线直接管道运行的情况，在线下载最新版作为快捷键
-        echo -e "${BLUE}由于您处于在线运行状态，正在从 GitHub 下载最新版本作为本地快捷命令...${NC}"
+        # 兼容直接在线管道运行的情况，从 GitHub 抓取最新版本并写入快捷命令
+        echo -e "${BLUE}由于您当前是在线直接运行，正在自动部署最新版管理程序至本地快捷命令...${NC}"
         local remote_script="https://raw.githubusercontent.com/Skycnhe/alpine-mihomo/refs/heads/Hk001/mihomo.sh"
         curl -sSL -o "${SHORTCUT_PATH}" "${remote_script}"
         if [ -f "${SHORTCUT_PATH}" ]; then
             chmod +x "${SHORTCUT_PATH}"
-            echo -e "${GREEN}✔ 快捷命令创建成功：可通过在终端输入 'mm' 快速启动此管理面板。${NC}"
+            echo -e "${GREEN}✔ 快捷命令部署成功！您可以在终端随时输入 'mm' 调出管理面板。${NC}"
         fi
     fi
 }
@@ -430,7 +445,7 @@ install_dashboard() {
     fi
     
     echo -e "${BLUE}正在进行解压和部署...${NC}"
-    # 安全起见，解压前彻底清理旧的临时解压文件夹，防止 mv 嵌套路径
+    # 安全起见，解压前彻底清理旧的临时解压目录，防止路径合并错误
     rm -rf "/tmp/${DIR_NAME}"
     unzip -q -o /tmp/dashboard_temp.zip -d /tmp
     
@@ -641,7 +656,7 @@ show_menu() {
     get_status
     clear
     echo -e "${GREEN}====================================================${NC}"
-    echo -e "       Alpine Linux Mihomo 整合管理脚本             "
+    echo -e "     Alpine Linux Mihomo 整合管理脚本 (v${SCRIPT_VERSION})      "
     echo -e "${GREEN}====================================================${NC}"
     echo -e "  服务状态: ${STATUS_TEXT}    |  已装版本: ${BLUE}${VERSION_TEXT}${NC}"
     echo -e "  主配置文件: ${CONFIG_FILE}"
@@ -670,7 +685,7 @@ show_menu() {
 #  脚本启动入口
 # =====================================================================
 
-# 1. 自动执行旧脚本清理及快捷方式自动更新
+# 1. 自动执行旧脚本清理及快捷方式智能版本比对
 cleanup_and_update_old_scripts
 
 # 2. 进入菜单主循环
